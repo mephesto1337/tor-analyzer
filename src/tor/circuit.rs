@@ -2,43 +2,15 @@ use std::fmt::{self, Write};
 use std::str::FromStr;
 
 use nom::branch::alt;
-use nom::bytes::{
-    complete::{tag, take},
-    streaming::take_while,
-};
+use nom::bytes::complete::tag;
 use nom::character::complete::{alphanumeric1, digit1, space1};
 use nom::combinator::{map, map_opt, opt, verify};
 use nom::error::context;
 use nom::multi::{count, separated_list1};
 use nom::sequence::tuple;
 
-fn word(s: &str) -> nom::IResult<&str, &str> {
-    take_while(|c: char| c.is_ascii_alphanumeric() || c == '_')(s)
-}
-
-fn base32_word(s: &str) -> nom::IResult<&str, &str> {
-    take_while(|c: char| {
-        c.is_ascii_uppercase()
-            || c == '2'
-            || c == '3'
-            || c == '4'
-            || c == '5'
-            || c == '6'
-            || c == '7'
-    })(s)
-}
-
-fn parse_hex(s: &str) -> nom::IResult<&str, u8> {
-    let (rest, h) = map_opt(take(2usize), |h| {
-        let x = u8::from_str_radix(h, 16).ok();
-        x
-    })(s)?;
-    Ok((rest, h))
-}
-
-pub trait NomParse: Sized {
-    fn parse(input: &str) -> nom::IResult<&str, Self>;
-}
+use crate::tor::utils::{base32_word, parse_hex, word};
+use crate::tor::NomParse;
 
 macro_rules! impl_from_str {
     ($type:ty) => {
@@ -620,6 +592,7 @@ pub struct Circuit {
     pub socks_username: Option<String>,
     pub socks_password: Option<String>,
 }
+
 impl fmt::Display for Circuit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "id={} status={}, path=[", self.id, self.status)?;

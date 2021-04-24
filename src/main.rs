@@ -38,7 +38,7 @@ async fn run() -> Result<(), ConnError> {
     println!("circuits: {}", circuits);
     let mut rest_circuits = circuits.as_str();
     while !rest_circuits.is_empty() {
-        let (rest, c) = tor_analyzer::tor::Circuit::parse(rest_circuits).map_err(|e| {
+        let (rest, c) = tor_analyzer::tor::circuit::Circuit::parse(rest_circuits).map_err(|e| {
             ConnError::IOError(io::Error::new(io::ErrorKind::Other, format!("{}", e)))
         })?;
         println!("{}", c);

@@ -87,6 +87,9 @@ fn build_ui(application: &gtk::Application) {
     });
     vbox.add(&update_btn);
 
+    // Fill table
+    update_btn.clicked();
+
     window.show_all();
 }
 

@@ -7,7 +7,7 @@ pub(crate) fn word(s: &str) -> nom::IResult<&str, &str> {
 
 pub(crate) fn base32_word(s: &str) -> nom::IResult<&str, &str> {
     take_while(|c: char| {
-        c.is_ascii_uppercase()
+        c.is_ascii_lowercase()
             || c == '2'
             || c == '3'
             || c == '4'

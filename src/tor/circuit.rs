@@ -2,8 +2,8 @@ use std::fmt::{self, Write};
 use std::str::FromStr;
 
 use nom::branch::alt;
-use nom::bytes::complete::tag;
-use nom::character::complete::{alphanumeric1, digit1, space1};
+use nom::bytes::complete::{escaped, tag};
+use nom::character::complete::{alphanumeric1, digit1, none_of, one_of, space1};
 use nom::combinator::{map, map_opt, opt, verify};
 use nom::error::context;
 use nom::multi::{count, separated_list1};
@@ -15,7 +15,7 @@ use crate::tor::NomParse;
 macro_rules! impl_from_str {
     ($type:ty) => {
         impl FromStr for $type {
-            type Err = ParsingError;
+            type Err = $crate::error::Error;
 
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 Ok(Self::parse(s)?.1)
@@ -24,34 +24,7 @@ macro_rules! impl_from_str {
     };
 }
 
-#[derive(Debug)]
-pub enum ParsingError {
-    MissingMandatoryField(String),
-    BadCharacter { field: String, character: char },
-    BadLength { field: String, length: usize },
-    UnknownVariant(String),
-    Nom(String),
-}
-
-impl<E> From<nom::Err<E>> for ParsingError
-where
-    E: std::error::Error,
-{
-    fn from(e: nom::Err<E>) -> Self {
-        Self::Nom(format!("{}", e))
-    }
-}
-
-impl<E> From<nom::error::Error<E>> for ParsingError
-where
-    E: std::error::Error,
-{
-    fn from(e: nom::error::Error<E>) -> Self {
-        Self::Nom(format!("{}", e))
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum CircuitStatus {
     /// circuit ID assigned to new circuit
     Launched,
@@ -102,7 +75,7 @@ impl fmt::Display for CircuitStatus {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum CircuitBuildFlag {
     /// One-hop circuit, used for tunneled directory conns
     OneHopTunnel,
@@ -143,7 +116,31 @@ impl fmt::Display for CircuitBuildFlag {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default, Eq, PartialEq)]
+pub struct CircuitBuildFlags(Vec<CircuitBuildFlag>);
+
+impl NomParse for CircuitBuildFlags {
+    fn parse(input: &str) -> nom::IResult<&str, Self> {
+        let (rest, flags) = separated_list1(tag(","), CircuitBuildFlag::parse)(input)?;
+        Ok((rest, Self(flags)))
+    }
+}
+impl_from_str!(CircuitBuildFlags);
+
+impl fmt::Display for CircuitBuildFlags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for (i, flag) in self.0.iter().enumerate() {
+            if i == 0 {
+                write!(f, "{}", flag)?;
+            } else {
+                write!(f, "|{}", flag)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
 pub enum CircuitPurpose {
     /// Circuit for AP and/or directory request streams
     General,
@@ -159,6 +156,8 @@ pub enum CircuitPurpose {
 
     /// HS service-side rendezvous circuit
     HsServiceRend,
+
+    HsClientHsDir,
 
     /// Reachability-testing circuit; carries no traffic
     Testing,
@@ -187,6 +186,7 @@ impl NomParse for CircuitPurpose {
                 map(tag("GENERAL"), |_| Self::General),
                 map(tag("HS_CLIENT_INTRO"), |_| Self::HsClientIntro),
                 map(tag("HS_CLIENT_REND"), |_| Self::HsClientRend),
+                map(tag("HS_CLIENT_HSDIR"), |_| Self::HsClientHsDir),
                 map(tag("HS_SERVICE_INTRO"), |_| Self::HsServiceIntro),
                 map(tag("HS_SERVICE_REND"), |_| Self::HsServiceRend),
                 map(tag("TESTING"), |_| Self::Testing),
@@ -207,6 +207,7 @@ impl fmt::Display for CircuitPurpose {
             Self::General => f.write_str("GENERAL"),
             Self::HsClientIntro => f.write_str("HS_CLIENT_INTRO"),
             Self::HsClientRend => f.write_str("HS_CLIENT_REND"),
+            Self::HsClientHsDir => f.write_str("HS_CLIENT_HSDIR"),
             Self::HsServiceIntro => f.write_str("HS_SERVICE_INTRO"),
             Self::HsServiceRend => f.write_str("HS_SERVICE_REND"),
             Self::Testing => f.write_str("TESTING"),
@@ -219,7 +220,7 @@ impl fmt::Display for CircuitPurpose {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum HsState {
     /// Client-side introduction-point circuit states, connecting to intro point
     HSCIConnecting,
@@ -297,7 +298,7 @@ impl fmt::Display for HsState {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum CircuitReason {
     None,
     TorProtocol,
@@ -364,7 +365,7 @@ impl fmt::Display for CircuitReason {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct CircuitID(String);
 
 impl NomParse for CircuitID {
@@ -386,7 +387,7 @@ impl fmt::Display for CircuitID {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Eq, PartialEq)]
 pub struct Path {
     fingerprint: [u8; 20],
     nickname: Option<String>,
@@ -418,7 +419,7 @@ impl fmt::Display for Path {
     }
 }
 
-impl Path {
+impl NomParse for Path {
     fn parse(s: &str) -> nom::IResult<&str, Self> {
         let (rest, (_dollar, fingerprint)) =
             context("Path fingerprint", tuple((tag("$"), count(parse_hex, 20))))(s)?;
@@ -443,7 +444,32 @@ impl Path {
 }
 impl_from_str!(Path);
 
-#[derive(Debug)]
+#[derive(Default, Debug, Eq, PartialEq)]
+pub struct Paths(Vec<Path>);
+
+impl fmt::Display for Paths {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_char('[')?;
+        for (i, path) in self.0.iter().enumerate() {
+            if i == 0 {
+                write!(f, "{}", path)?;
+            } else {
+                write!(f, ", {}", path)?;
+            }
+        }
+        f.write_char(']')
+    }
+}
+
+impl NomParse for Paths {
+    fn parse(input: &str) -> nom::IResult<&str, Self> {
+        let (rest, paths) = nom::multi::separated_list0(tag(","), Path::parse)(input)?;
+        Ok((rest, Self(paths)))
+    }
+}
+impl_from_str!(Paths);
+
+#[derive(Debug, Eq, PartialEq)]
 pub struct Time {
     pub year: u16,
     pub month: u8,
@@ -515,6 +541,7 @@ impl fmt::Display for Time {
     }
 }
 
+#[derive(PartialEq, Eq)]
 pub enum HsAddress {
     V2([u8; 10]),
     V3([u8; 35]),
@@ -578,12 +605,12 @@ impl NomParse for HsAddress {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct Circuit {
     pub id: CircuitID,
     pub status: CircuitStatus,
-    pub path: Vec<Path>,
-    pub build_flags: Vec<CircuitBuildFlag>,
+    pub paths: Paths,
+    pub build_flags: CircuitBuildFlags,
     pub purpose: Option<CircuitPurpose>,
     pub hs_state: Option<HsState>,
     pub rend_query: Option<HsAddress>,
@@ -595,49 +622,32 @@ pub struct Circuit {
 
 impl fmt::Display for Circuit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "id={} status={}, path=[", self.id, self.status)?;
-        for (i, path) in self.path.iter().enumerate() {
-            if i == 0 {
-                write!(f, "{}", path)?;
-            } else {
-                write!(f, ", {}", path)?;
-            }
-        }
-        f.write_str("] build_flags=")?;
-        for (i, flag) in self.build_flags.iter().enumerate() {
-            if i == 0 {
-                write!(f, "{}", flag)?;
-            } else {
-                write!(f, "|{}", flag)?;
-            }
-        }
-        f.write_str(" purpose=")?;
+        write!(
+            f,
+            "id={} status={}, path={} build_flags={}",
+            self.id, self.status, self.paths, self.build_flags
+        )?;
+
         if let Some(ref purpose) = self.purpose {
-            write!(f, "{}", purpose)?;
+            write!(f, " purpose={}", purpose)?;
         }
-        f.write_str(" hs_state=")?;
         if let Some(ref hs_state) = self.hs_state {
-            write!(f, "{}", hs_state)?;
+            write!(f, " hs_state={}", hs_state)?;
         }
-        f.write_str(" rend_query=")?;
         if let Some(ref rend_query) = self.rend_query {
-            write!(f, "{}", rend_query)?;
+            write!(f, " rend_query={}", rend_query)?;
         }
-        f.write_str(" time_created=")?;
         if let Some(ref time_created) = self.time_created {
-            write!(f, "{}", time_created)?;
+            write!(f, " time_created={}", time_created)?;
         }
-        f.write_str(" reason=")?;
         if let Some(ref reason) = self.reason {
-            write!(f, "{}", reason)?;
+            write!(f, " reason={}", reason)?;
         }
-        f.write_str(" socks_username=")?;
         if let Some(ref socks_username) = self.socks_username {
-            write!(f, "{}", socks_username)?;
+            write!(f, " socks_username={}", socks_username)?;
         }
-        f.write_str(" socks_password=")?;
         if let Some(ref socks_password) = self.socks_password {
-            write!(f, "{}", socks_password)?;
+            write!(f, " socks_password={}", socks_password)?;
         }
 
         Ok(())
@@ -649,17 +659,18 @@ impl Circuit {
         let (rest, (_, circuit_id, _, status)) =
             tuple((tag("\r\n"), CircuitID::parse, space1, CircuitStatus::parse))(s)?;
 
-        let (rest, opt_path) = opt(tuple((space1, separated_list1(tag(","), Path::parse))))(rest)?;
-        let path = opt_path.map(|x| x.1).unwrap_or_default();
-        eprintln!("path = {:?}", path);
+        let (rest, opt_paths) = context("Paths", opt(tuple((space1, Paths::parse))))(rest)?;
+        let paths = opt_paths.map(|x| x.1).unwrap_or_default();
 
-        let (rest, opt_build_flags) = opt(tuple((
-            space1,
-            tag("BUILD_FLAGS="),
-            separated_list1(tag(","), CircuitBuildFlag::parse),
-        )))(rest)?;
+        let (rest, opt_build_flags) = context(
+            "Build flags",
+            opt(tuple((
+                space1,
+                tag("BUILD_FLAGS="),
+                CircuitBuildFlags::parse,
+            ))),
+        )(rest)?;
         let build_flags = opt_build_flags.map(|x| x.2).unwrap_or_default();
-        eprintln!("build flags = {:?}", build_flags);
 
         let (rest, opt_purpose) = context(
             "PURPOSE",
@@ -670,11 +681,9 @@ impl Circuit {
             ))),
         )(rest)?;
         let purpose = opt_purpose.map(|x| x.2);
-        eprintln!("purpose = {:?}", purpose);
 
         let (rest, opt_hs_state) = opt(tuple((space1, tag("HS_STATE="), HsState::parse)))(rest)?;
         let hs_state = opt_hs_state.map(|x| x.2);
-        eprintln!("HS state = {:?}", hs_state);
 
         let (rest, opt_rend_query) =
             opt(tuple((space1, tag("REND_QUERY="), HsAddress::parse)))(rest)?;
@@ -686,16 +695,40 @@ impl Circuit {
         )(rest)?;
         let time_created = opt_time_created.map(|x| x.2);
 
-        let reason = None;
-        let socks_username = None;
-        let socks_password = None;
+        let (rest, opt_reason) = context(
+            "reason",
+            opt(tuple((space1, tag("REASON="), CircuitReason::parse))),
+        )(rest)?;
+        let reason = opt_reason.map(|x| x.2);
+
+        let (rest, opt_socks_username) = context(
+            "socks username",
+            opt(tuple((
+                space1,
+                tag("SOCKS_USERNAME=\""),
+                escaped(none_of("\\"), '\\', one_of("\\\"")),
+                tag("\""),
+            ))),
+        )(rest)?;
+        let socks_username = opt_socks_username.map(|x| x.2.to_owned());
+
+        let (rest, opt_socks_password) = context(
+            "socks password",
+            opt(tuple((
+                space1,
+                tag("SOCKS_PASSWORD=\""),
+                escaped(none_of("\\"), '\\', one_of("\\\"")),
+                tag("\""),
+            ))),
+        )(rest)?;
+        let socks_password = opt_socks_password.map(|x| x.2.to_owned());
 
         Ok((
             rest,
             Self {
                 id: circuit_id,
                 status,
-                path,
+                paths,
                 build_flags,
                 purpose,
                 hs_state,
@@ -709,3 +742,72 @@ impl Circuit {
     }
 }
 impl_from_str!(Circuit);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn it_works() {
+        let input = "\r\n50 BUILT \
+        $8737307DE84C2621E6399E99123967A9590297F2~Tor0x800,\
+        $243996E46218666C1CADDE17B430EA7F95124F96~GoofyRooster,\
+        $3A9443710224E5182895C342D1D36C1D460A1206~CanterSecure04 \
+        BUILD_FLAGS=IS_INTERNAL,NEED_CAPACITY,NEED_UPTIME \
+        PURPOSE=HS_CLIENT_REND HS_STATE=HSCR_JOINED \
+        REND_QUERY=cflareub6dtu7nvs3kqmoigcjdwap2azrkx5zohb2yk7gqjkwoyotwqd \
+        TIME_CREATED=2021-04-30T13:28:42.004916";
+
+        let circuit = Circuit {
+            id: CircuitID("50".into()),
+            status: CircuitStatus::Built,
+            paths: Paths(vec![
+                Path {
+                    fingerprint: [
+                        0x87, 0x37, 0x30, 0x7d, 0xe8, 0x4c, 0x26, 0x21, 0xe6, 0x39, 0x9e, 0x99,
+                        0x12, 0x39, 0x67, 0xa9, 0x59, 0x02, 0x97, 0xf2,
+                    ],
+                    nickname: Some("Tor0x800".into()),
+                },
+                Path {
+                    fingerprint: [
+                        0x24, 0x39, 0x96, 0xe4, 0x62, 0x18, 0x66, 0x6c, 0x1c, 0xad, 0xde, 0x17,
+                        0xb4, 0x30, 0xea, 0x7f, 0x95, 0x12, 0x4f, 0x96,
+                    ],
+                    nickname: Some("GoofyRooster".into()),
+                },
+                Path {
+                    fingerprint: [
+                        0x3a, 0x94, 0x43, 0x71, 0x02, 0x24, 0xe5, 0x18, 0x28, 0x95, 0xc3, 0x42,
+                        0xd1, 0xd3, 0x6c, 0x1d, 0x46, 0x0a, 0x12, 0x06,
+                    ],
+                    nickname: Some("CanterSecure04".into()),
+                },
+            ]),
+            build_flags: CircuitBuildFlags(vec![
+                CircuitBuildFlag::IsInternal,
+                CircuitBuildFlag::NeedCapacity,
+                CircuitBuildFlag::NeedUptime,
+            ]),
+            purpose: Some(CircuitPurpose::HsClientRend),
+            hs_state: Some(HsState::HSCRJoined),
+            rend_query: Some(HsAddress::V3([
+                0x11, 0x56, 0x08, 0x92, 0x81, 0xf0, 0xe7, 0x4f, 0xb6, 0xb2, 0xda, 0xa0, 0xc7, 0x20,
+                0xc2, 0x48, 0xec, 0x07, 0xe8, 0x19, 0x8a, 0xaf, 0xdc, 0xb8, 0xe1, 0xd6, 0x15, 0xf3,
+                0x41, 0x2a, 0xb3, 0xb0, 0xe9, 0xda, 0x03,
+            ])),
+            time_created: Some(Time {
+                year: 2021,
+                month: 4,
+                day: 30,
+                hour: 13,
+                minute: 28,
+                second: 42,
+                mseconds: 4916,
+            }),
+            reason: None,
+            socks_username: None,
+            socks_password: None,
+        };
+        assert_eq!(Circuit::parse(input), Ok(("", circuit)));
+    }
+}

@@ -1,5 +1,6 @@
 use std::env;
 use std::io;
+use std::net::IpAddr;
 use std::path::Path;
 use std::rc::Rc;
 
@@ -13,8 +14,18 @@ use torut::control::{AsyncEvent, ConnError, UnauthenticatedConn};
 use tor_analyzer::error::Error;
 use tor_analyzer::socket::Socket;
 use tor_analyzer::tor::circuit::Circuit;
+use tor_analyzer::tor::ns::OnionRouter;
+use tor_analyzer::tor::NomParse;
 
-const FIELD_COUNT: usize = 11;
+const FIELD_COUNT: usize = 4;
+
+#[derive(Debug)]
+struct SimpleCircuit {
+    id: tor_analyzer::tor::circuit::CircuitID,
+    state: tor_analyzer::tor::circuit::CircuitStatus,
+    path: Vec<OnionRouter>,
+    endpoint: (IpAddr, u16),
+}
 
 #[derive(Debug)]
 #[repr(i32)]
@@ -22,14 +33,7 @@ enum Columns {
     Id,
     Status,
     Path,
-    BuildFlags,
-    Purpose,
-    HsState,
-    RendQuery,
-    TimeCreated,
-    Reason,
-    SocksUsername,
-    SocksPassword,
+    EndPoint,
 }
 
 macro_rules! add_column {
@@ -71,14 +75,7 @@ fn build_ui(application: &gtk::Application) {
     add_column!(treeview, Columns::Id, "Id");
     add_column!(treeview, Columns::Status, "Status");
     add_column!(treeview, Columns::Path, "Path");
-    add_column!(treeview, Columns::BuildFlags, "Build flags");
-    add_column!(treeview, Columns::Purpose, "Purpose");
-    add_column!(treeview, Columns::HsState, "Hs State");
-    add_column!(treeview, Columns::RendQuery, "Rend Query");
-    add_column!(treeview, Columns::TimeCreated, "Created");
-    add_column!(treeview, Columns::Reason, "Reason");
-    add_column!(treeview, Columns::SocksUsername, "Username");
-    add_column!(treeview, Columns::SocksPassword, "Password");
+    add_column!(treeview, Columns::EndPoint, "End point");
 
     let update_btn = gtk::Button::with_label("Update");
     update_btn.connect_clicked(move |_| {
@@ -97,7 +94,7 @@ async fn event_handler(_event: AsyncEvent<'static>) -> Result<(), ConnError> {
     Ok(())
 }
 
-async fn async_get_circuits() -> Result<Vec<Circuit>, Error> {
+async fn async_get_circuits() -> Result<Vec<SimpleCircuit>, Error> {
     let socket: Socket = match env::args().skip(1).next() {
         Some(a) => {
             let path = Path::new(a.as_str());
@@ -128,12 +125,33 @@ async fn async_get_circuits() -> Result<Vec<Circuit>, Error> {
     conn.set_async_event_handler(Some(event_handler));
 
     let circuits_string = conn.get_info("circuit-status").await?;
-    let (_rest, c) = nom::multi::many1(Circuit::parse)(circuits_string.as_str())?;
+    let (_rest, mut circuits) = nom::multi::many1(
+        Circuit::parse::<nom::error::VerboseError<&str>>,
+    )(circuits_string.as_str())?;
 
-    Ok(c)
+    let mut simple_circuits = Vec::with_capacity(circuits.len());
+    for mut c in circuits.drain(..) {
+        let mut path = Vec::with_capacity(c.path.len());
+
+        for mut step in c.path.drain(..) {
+            step.nickname = None;
+            let or_str = conn.get_info(&format!("ns/id/${}", step)).await?;
+            let (_, or) = OnionRouter::parse::<nom::error::VerboseError<&str>>(or_str.as_str())?;
+            path.push(or);
+        }
+
+        simple_circuits.push(dbg!(SimpleCircuit {
+            id: c.id,
+            state: c.status,
+            path,
+            endpoint: (IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), 0),
+        }))
+    }
+
+    Ok(simple_circuits)
 }
 
-fn get_circuits() -> Vec<Circuit> {
+fn get_circuits() -> Vec<SimpleCircuit> {
     let mut circuits = Vec::new();
 
     tokio::runtime::Builder::new_multi_thread()
@@ -143,7 +161,7 @@ fn get_circuits() -> Vec<Circuit> {
         .block_on(async {
             match async_get_circuits().await {
                 Ok(mut c) => circuits.extend(c.drain(..)),
-                Err(_) => {}
+                Err(e) => eprintln!("Error: {:?}", e),
             }
         });
 
@@ -154,6 +172,10 @@ macro_rules! to_gtk_value {
     ($displayable:expr) => {
         format!("{}", $displayable)
     };
+    (Pair $displayable:expr, $sep:expr) => {{
+        let (a, b) = $displayable;
+        format!("{}{}{}", a, $sep, b)
+    }};
     (Option $displayable:expr) => {
         if let Some(ref disp) = $displayable {
             format!("{}", disp)
@@ -161,6 +183,20 @@ macro_rules! to_gtk_value {
             String::new()
         }
     };
+    (Vec $displayable:expr) => {{
+        let mut s = String::from("[");
+        let mut first = true;
+        for item in $displayable.iter() {
+            if first {
+                s.push_str(&format!("{}", item));
+            } else {
+                s.push_str(&format!(", {}", item));
+            }
+            first = false;
+        }
+        s.push(']');
+        s
+    }};
 }
 
 fn update_model(store: &gtk::ListStore) {
@@ -173,20 +209,13 @@ fn update_model(store: &gtk::ListStore) {
         *idx = i as u32;
     }
     for d in data.iter() {
-        #[cfg(debug_assertions)]
-        eprintln!("Got circuit: {}", d);
+        // #[cfg(debug_assertions)]
+        eprintln!("Got circuit: {:?}", d);
         let values: [&dyn ToValue; FIELD_COUNT] = [
             &to_gtk_value!(d.id),
-            &to_gtk_value!(d.status),
-            &to_gtk_value!(d.paths),
-            &to_gtk_value!(d.build_flags),
-            &to_gtk_value!(Option d.purpose),
-            &to_gtk_value!(Option d.hs_state),
-            &to_gtk_value!(Option d.rend_query),
-            &to_gtk_value!(Option d.time_created),
-            &to_gtk_value!(Option d.reason),
-            &to_gtk_value!(Option d.socks_username),
-            &to_gtk_value!(Option d.socks_password),
+            &to_gtk_value!(d.state),
+            &to_gtk_value!(Vec d.path),
+            &to_gtk_value!(Pair d.endpoint, ':'),
         ];
         store.set(&store.append(), &indexes[..], &values);
     }

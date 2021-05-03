@@ -14,9 +14,10 @@ path = "src/bin/gui.rs"
 
 [dependencies]
 tokio = { version = "1.4", features = ["full"] }
-torut = "0.1.8"
+torut = { path = "torut" }
 nom = "6"
 base32 = "0.4"
+base64 = "0.10"
 gtk = "0.9"
 gio = "0.9"
 glib = "0.10"

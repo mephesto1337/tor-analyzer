@@ -5,24 +5,12 @@ use nom::branch::alt;
 use nom::bytes::complete::{escaped, tag};
 use nom::character::complete::{alphanumeric1, digit1, none_of, one_of, space1};
 use nom::combinator::{map, map_opt, opt, verify};
-use nom::error::context;
+use nom::error::{context, ContextError, ParseError};
 use nom::multi::{count, separated_list1};
 use nom::sequence::tuple;
 
 use crate::tor::utils::{base32_word, parse_hex, word};
 use crate::tor::NomParse;
-
-macro_rules! impl_from_str {
-    ($type:ty) => {
-        impl FromStr for $type {
-            type Err = $crate::error::Error;
-
-            fn from_str(s: &str) -> Result<Self, Self::Err> {
-                Ok(Self::parse(s)?.1)
-            }
-        }
-    };
-}
 
 #[derive(Debug, Eq, PartialEq)]
 pub enum CircuitStatus {
@@ -46,7 +34,10 @@ pub enum CircuitStatus {
 }
 
 impl NomParse for CircuitStatus {
-    fn parse(input: &str) -> nom::IResult<&str, Self> {
+    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
         context(
             "Circuit status",
             alt((
@@ -91,7 +82,10 @@ pub enum CircuitBuildFlag {
 }
 
 impl NomParse for CircuitBuildFlag {
-    fn parse(input: &str) -> nom::IResult<&str, Self> {
+    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
         context(
             "Circuit build flag",
             alt((
@@ -120,7 +114,10 @@ impl fmt::Display for CircuitBuildFlag {
 pub struct CircuitBuildFlags(Vec<CircuitBuildFlag>);
 
 impl NomParse for CircuitBuildFlags {
-    fn parse(input: &str) -> nom::IResult<&str, Self> {
+    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
         let (rest, flags) = separated_list1(tag(","), CircuitBuildFlag::parse)(input)?;
         Ok((rest, Self(flags)))
     }
@@ -179,7 +176,10 @@ pub enum CircuitPurpose {
 }
 
 impl NomParse for CircuitPurpose {
-    fn parse(input: &str) -> nom::IResult<&str, Self> {
+    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
         context(
             "Circuit purpose",
             alt((
@@ -257,7 +257,10 @@ pub enum HsState {
 }
 
 impl NomParse for HsState {
-    fn parse(input: &str) -> nom::IResult<&str, Self> {
+    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
         context(
             "HS state",
             alt((
@@ -318,7 +321,10 @@ pub enum CircuitReason {
 }
 
 impl NomParse for CircuitReason {
-    fn parse(s: &str) -> nom::IResult<&str, Self> {
+    fn parse<'a, E>(s: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
         context(
             "Circuit reason",
             alt((
@@ -369,7 +375,10 @@ impl fmt::Display for CircuitReason {
 pub struct CircuitID(String);
 
 impl NomParse for CircuitID {
-    fn parse(input: &str) -> nom::IResult<&str, Self> {
+    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
         context(
             "Circuit ID",
             map(
@@ -388,28 +397,28 @@ impl fmt::Display for CircuitID {
 }
 
 #[derive(Default, Eq, PartialEq)]
-pub struct Path {
-    fingerprint: [u8; 20],
-    nickname: Option<String>,
+pub struct Step {
+    pub fingerprint: [u8; 20],
+    pub nickname: Option<String>,
 }
 
-impl fmt::Debug for Path {
+impl fmt::Debug for Step {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut fingerprint = String::with_capacity(self.fingerprint.len() * 2);
         for byte in self.fingerprint.iter() {
             fingerprint.push_str(format!("{:02x}", *byte).as_str());
         }
-        f.debug_struct("Path")
+        f.debug_struct("Step")
             .field("fingerprint", &fingerprint)
             .field("nickname", &self.nickname)
             .finish()
     }
 }
 
-impl fmt::Display for Path {
+impl fmt::Display for Step {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for byte in self.fingerprint.iter() {
-            f.write_fmt(format_args!("{:02x}", *byte))?;
+            f.write_fmt(format_args!("{:02X}", *byte))?;
         }
         if let Some(ref nickname) = self.nickname {
             f.write_char('~')?;
@@ -419,10 +428,13 @@ impl fmt::Display for Path {
     }
 }
 
-impl NomParse for Path {
-    fn parse(s: &str) -> nom::IResult<&str, Self> {
+impl NomParse for Step {
+    fn parse<'a, E>(s: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
         let (rest, (_dollar, fingerprint)) =
-            context("Path fingerprint", tuple((tag("$"), count(parse_hex, 20))))(s)?;
+            context("Step fingerprint", tuple((tag("$"), count(parse_hex, 20))))(s)?;
 
         let mut me = Self::default();
         me.fingerprint.copy_from_slice(&fingerprint[..]);
@@ -442,12 +454,12 @@ impl NomParse for Path {
         Ok((rest, me))
     }
 }
-impl_from_str!(Path);
+impl_from_str!(Step);
 
 #[derive(Default, Debug, Eq, PartialEq)]
-pub struct Paths(Vec<Path>);
+pub struct Path(Vec<Step>);
 
-impl fmt::Display for Paths {
+impl fmt::Display for Path {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_char('[')?;
         for (i, path) in self.0.iter().enumerate() {
@@ -461,13 +473,30 @@ impl fmt::Display for Paths {
     }
 }
 
-impl NomParse for Paths {
-    fn parse(input: &str) -> nom::IResult<&str, Self> {
-        let (rest, paths) = nom::multi::separated_list0(tag(","), Path::parse)(input)?;
+impl std::ops::Deref for Path {
+    type Target = Vec<Step>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for Path {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl NomParse for Path {
+    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
+        let (rest, paths) = nom::multi::separated_list0(tag(","), Step::parse)(input)?;
         Ok((rest, Self(paths)))
     }
 }
-impl_from_str!(Paths);
+impl_from_str!(Path);
 
 #[derive(Debug, Eq, PartialEq)]
 pub struct Time {
@@ -481,40 +510,45 @@ pub struct Time {
 }
 
 impl NomParse for Time {
-    fn parse(input: &str) -> nom::IResult<&str, Self> {
-        let (rest, (year, _, month, _, day, _, hour, _, minute, _, second, _, mseconds)) =
-            context(
-                "Time created",
-                tuple((
-                    map(verify(digit1, |s: &str| s.len() == 4), |s: &str| {
-                        s.parse::<u16>().unwrap()
-                    }),
-                    tag("-"),
-                    map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
-                        s.parse::<u8>().unwrap()
-                    }),
-                    tag("-"),
-                    map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
-                        s.parse::<u8>().unwrap()
-                    }),
-                    tag("T"),
-                    map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
-                        s.parse::<u8>().unwrap()
-                    }),
-                    tag(":"),
-                    map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
-                        s.parse::<u8>().unwrap()
-                    }),
-                    tag(":"),
-                    map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
-                        s.parse::<u8>().unwrap()
-                    }),
-                    tag("."),
-                    map(verify(digit1, |s: &str| s.len() == 6), |s: &str| {
-                        s.parse::<u32>().unwrap()
-                    }),
-                )),
-            )(input)?;
+    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
+        let (rest, (year, _, month, _, day, _, hour, _, minute, _, second)) = context(
+            "Time created",
+            tuple((
+                map(verify(digit1, |s: &str| s.len() == 4), |s: &str| {
+                    s.parse::<u16>().unwrap()
+                }),
+                tag("-"),
+                map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
+                    s.parse::<u8>().unwrap()
+                }),
+                tag("-"),
+                map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
+                    s.parse::<u8>().unwrap()
+                }),
+                alt((tag("T"), tag(" "))),
+                map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
+                    s.parse::<u8>().unwrap()
+                }),
+                tag(":"),
+                map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
+                    s.parse::<u8>().unwrap()
+                }),
+                tag(":"),
+                map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
+                    s.parse::<u8>().unwrap()
+                }),
+            )),
+        )(input)?;
+        let (rest, opt_mseconds) = opt(tuple((
+            tag("."),
+            map(verify(digit1, |s: &str| s.len() == 6), |s: &str| {
+                s.parse::<u32>().unwrap()
+            }),
+        )))(rest)?;
+        let mseconds = opt_mseconds.map(|x| x.1).unwrap_or_default();
 
         Ok((
             rest,
@@ -579,7 +613,10 @@ impl fmt::Display for HsAddress {
 }
 
 impl NomParse for HsAddress {
-    fn parse(input: &str) -> nom::IResult<&str, Self> {
+    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
         let (rest, addr) = context(
             "HS address",
             verify(base32_word, |s: &str| s.len() == 16 || s.len() == 56),
@@ -609,7 +646,7 @@ impl NomParse for HsAddress {
 pub struct Circuit {
     pub id: CircuitID,
     pub status: CircuitStatus,
-    pub paths: Paths,
+    pub path: Path,
     pub build_flags: CircuitBuildFlags,
     pub purpose: Option<CircuitPurpose>,
     pub hs_state: Option<HsState>,
@@ -625,7 +662,7 @@ impl fmt::Display for Circuit {
         write!(
             f,
             "id={} status={}, path={} build_flags={}",
-            self.id, self.status, self.paths, self.build_flags
+            self.id, self.status, self.path, self.build_flags
         )?;
 
         if let Some(ref purpose) = self.purpose {
@@ -654,13 +691,20 @@ impl fmt::Display for Circuit {
     }
 }
 
-impl Circuit {
-    pub fn parse(s: &str) -> nom::IResult<&str, Self> {
-        let (rest, (_, circuit_id, _, status)) =
-            tuple((tag("\r\n"), CircuitID::parse, space1, CircuitStatus::parse))(s)?;
+impl NomParse for Circuit {
+    fn parse<'a, E>(s: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
+        let (rest, (_, circuit_id, _, status)) = tuple((
+            opt(tag("\r\n")),
+            CircuitID::parse,
+            space1,
+            CircuitStatus::parse,
+        ))(s)?;
 
-        let (rest, opt_paths) = context("Paths", opt(tuple((space1, Paths::parse))))(rest)?;
-        let paths = opt_paths.map(|x| x.1).unwrap_or_default();
+        let (rest, opt_path) = context("Path", opt(tuple((space1, Path::parse))))(rest)?;
+        let path = opt_path.map(|x| x.1).unwrap_or_default();
 
         let (rest, opt_build_flags) = context(
             "Build flags",
@@ -728,7 +772,7 @@ impl Circuit {
             Self {
                 id: circuit_id,
                 status,
-                paths,
+                path,
                 build_flags,
                 purpose,
                 hs_state,
@@ -746,8 +790,9 @@ impl_from_str!(Circuit);
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn it_works() {
+    fn parse_circuit() {
         let input = "\r\n50 BUILT \
         $8737307DE84C2621E6399E99123967A9590297F2~Tor0x800,\
         $243996E46218666C1CADDE17B430EA7F95124F96~GoofyRooster,\
@@ -760,22 +805,22 @@ mod tests {
         let circuit = Circuit {
             id: CircuitID("50".into()),
             status: CircuitStatus::Built,
-            paths: Paths(vec![
-                Path {
+            path: Path(vec![
+                Step {
                     fingerprint: [
                         0x87, 0x37, 0x30, 0x7d, 0xe8, 0x4c, 0x26, 0x21, 0xe6, 0x39, 0x9e, 0x99,
                         0x12, 0x39, 0x67, 0xa9, 0x59, 0x02, 0x97, 0xf2,
                     ],
                     nickname: Some("Tor0x800".into()),
                 },
-                Path {
+                Step {
                     fingerprint: [
                         0x24, 0x39, 0x96, 0xe4, 0x62, 0x18, 0x66, 0x6c, 0x1c, 0xad, 0xde, 0x17,
                         0xb4, 0x30, 0xea, 0x7f, 0x95, 0x12, 0x4f, 0x96,
                     ],
                     nickname: Some("GoofyRooster".into()),
                 },
-                Path {
+                Step {
                     fingerprint: [
                         0x3a, 0x94, 0x43, 0x71, 0x02, 0x24, 0xe5, 0x18, 0x28, 0x95, 0xc3, 0x42,
                         0xd1, 0xd3, 0x6c, 0x1d, 0x46, 0x0a, 0x12, 0x06,
@@ -808,6 +853,9 @@ mod tests {
             socks_username: None,
             socks_password: None,
         };
-        assert_eq!(Circuit::parse(input), Ok(("", circuit)));
+        assert_eq!(
+            Circuit::parse::<nom::error::VerboseError<&str>>(input),
+            Ok(("", circuit))
+        );
     }
 }

@@ -14,7 +14,7 @@ path = "src/bin/gui.rs"
 
 [dependencies]
 tokio = { version = "1.4", features = ["full"] }
-torut = { path = "torut" }
+torut = { git = "https://github.com/mephesto1337/torut.git", branch = "parse_single_key_value_dollar" }
 nom = "6"
 base32 = "0.4"
 base64 = "0.10"

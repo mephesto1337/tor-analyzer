@@ -140,12 +140,12 @@ async fn async_get_circuits() -> Result<Vec<SimpleCircuit>, Error> {
             path.push(or);
         }
 
-        simple_circuits.push(dbg!(SimpleCircuit {
+        simple_circuits.push(SimpleCircuit {
             id: c.id,
             state: c.status,
             path,
             endpoint: (IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), 0),
-        }))
+        })
     }
 
     Ok(simple_circuits)
@@ -209,7 +209,7 @@ fn update_model(store: &gtk::ListStore) {
         *idx = i as u32;
     }
     for d in data.iter() {
-        // #[cfg(debug_assertions)]
+        #[cfg(debug_assertions)]
         eprintln!("Got circuit: {:?}", d);
         let values: [&dyn ToValue; FIELD_COUNT] = [
             &to_gtk_value!(d.id),

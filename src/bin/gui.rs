@@ -11,20 +11,24 @@ use tokio::net::{TcpStream, UnixStream};
 
 use torut::control::{AsyncEvent, ConnError, UnauthenticatedConn};
 
+use tor_analyzer::country;
 use tor_analyzer::error::Error;
+use tor_analyzer::geoip::GeoIP;
 use tor_analyzer::socket::Socket;
 use tor_analyzer::tor::circuit::Circuit;
+use tor_analyzer::tor::common::Target;
 use tor_analyzer::tor::ns::OnionRouter;
+use tor_analyzer::tor::stream::Stream;
 use tor_analyzer::tor::NomParse;
 
 const FIELD_COUNT: usize = 4;
 
 #[derive(Debug)]
 struct SimpleCircuit {
-    id: tor_analyzer::tor::circuit::CircuitID,
+    id: tor_analyzer::tor::common::CircuitID,
     state: tor_analyzer::tor::circuit::CircuitStatus,
     path: Vec<OnionRouter>,
-    endpoint: (IpAddr, u16),
+    endpoint: Target,
 }
 
 #[derive(Debug)]
@@ -129,6 +133,10 @@ async fn async_get_circuits() -> Result<Vec<SimpleCircuit>, Error> {
         Circuit::parse::<nom::error::VerboseError<&str>>,
     )(circuits_string.as_str())?;
 
+    let stream_str = conn.get_info("stream-status").await?;
+    let (_, streams) =
+        nom::multi::many0(Stream::parse::<nom::error::VerboseError<&str>>)(stream_str.as_str())?;
+
     let mut simple_circuits = Vec::with_capacity(circuits.len());
     for mut c in circuits.drain(..) {
         let mut path = Vec::with_capacity(c.path.len());
@@ -140,11 +148,28 @@ async fn async_get_circuits() -> Result<Vec<SimpleCircuit>, Error> {
             path.push(or);
         }
 
+        let endpoint = match streams.iter().find_map(|s| {
+            if s.circuit_id == c.id {
+                Some(s.target.clone())
+            } else {
+                None
+            }
+        }) {
+            Some(ep) => ep,
+            None => {
+                eprintln!("Cannot find circuit id {}", c.id);
+                Target {
+                    addr: IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+                    port: 0,
+                }
+            }
+        };
+
         simple_circuits.push(SimpleCircuit {
             id: c.id,
             state: c.status,
             path,
-            endpoint: (IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)), 0),
+            endpoint,
         })
     }
 
@@ -161,46 +186,31 @@ fn get_circuits() -> Vec<SimpleCircuit> {
         .block_on(async {
             match async_get_circuits().await {
                 Ok(mut c) => circuits.extend(c.drain(..)),
-                Err(e) => eprintln!("Error: {:?}", e),
+                Err(e) => eprintln!("Error: {}", e),
             }
         });
 
     circuits
 }
 
-macro_rules! to_gtk_value {
-    ($displayable:expr) => {
-        format!("{}", $displayable)
-    };
-    (Pair $displayable:expr, $sep:expr) => {{
-        let (a, b) = $displayable;
-        format!("{}{}{}", a, $sep, b)
-    }};
-    (Option $displayable:expr) => {
-        if let Some(ref disp) = $displayable {
-            format!("{}", disp)
+fn localize_target(writer: &mut String, target: &Target, gi: &GeoIP) {
+    writer.push_str(&format!("{}", target));
+    if let Some(loc) = gi.lookup_ip(target.addr) {
+        writer.push_str(" (");
+        if let Some(country) = country::get_country(loc) {
+            writer.push_str(country.name);
+            writer.push(' ');
+            writer.push_str(country.flag)
         } else {
-            String::new()
+            writer.push_str(loc);
         }
-    };
-    (Vec $displayable:expr) => {{
-        let mut s = String::from("[");
-        let mut first = true;
-        for item in $displayable.iter() {
-            if first {
-                s.push_str(&format!("{}", item));
-            } else {
-                s.push_str(&format!(", {}", item));
-            }
-            first = false;
-        }
-        s.push(']');
-        s
-    }};
+        writer.push(')');
+    }
 }
 
 fn update_model(store: &gtk::ListStore) {
     let data = get_circuits();
+    let gi = tor_analyzer::geoip::GeoIP::new();
 
     store.clear();
 
@@ -211,12 +221,21 @@ fn update_model(store: &gtk::ListStore) {
     for d in data.iter() {
         #[cfg(debug_assertions)]
         eprintln!("Got circuit: {:?}", d);
-        let values: [&dyn ToValue; FIELD_COUNT] = [
-            &to_gtk_value!(d.id),
-            &to_gtk_value!(d.state),
-            &to_gtk_value!(Vec d.path),
-            &to_gtk_value!(Pair d.endpoint, ':'),
-        ];
+        let id = format!("{}", d.id);
+        let state = format!("{}", d.state);
+        let mut path = String::new();
+        let mut first = true;
+        for p in &d.path {
+            if !first {
+                path.push('\n');
+            }
+            first = false;
+            localize_target(&mut path, &p.target, &gi);
+        }
+        let mut endpoint = String::new();
+        localize_target(&mut endpoint, &d.endpoint, &gi);
+
+        let values: [&dyn ToValue; FIELD_COUNT] = [&id, &state, &path, &endpoint];
         store.set(&store.append(), &indexes[..], &values);
     }
 }

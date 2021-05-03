@@ -9,12 +9,14 @@ where
     take_while(|c: char| c.is_ascii_alphanumeric() || c == '_')(s)
 }
 
+/*
 pub(crate) fn no_space<'a, E>(s: &'a str) -> nom::IResult<&'a str, &'a str, E>
 where
     E: ParseError<&'a str> + ContextError<&'a str>,
 {
     take_while(|c: char| !c.is_ascii_whitespace())(s)
 }
+*/
 
 pub(crate) fn base64_word<'a, E>(s: &'a str) -> nom::IResult<&'a str, &'a str, E>
 where

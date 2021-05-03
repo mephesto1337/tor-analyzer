@@ -1,5 +1,5 @@
 use std::fmt;
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::Ipv6Addr;
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while};
@@ -9,8 +9,8 @@ use nom::error::{context, ContextError, ParseError};
 use nom::multi::many0;
 use nom::sequence::tuple;
 
-use crate::tor::circuit::Time;
-use crate::tor::utils::{base64_word, no_space, word};
+use crate::tor::common::{Target, Time};
+use crate::tor::utils::{base64_word, word};
 use crate::tor::NomParse;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -83,8 +83,7 @@ pub struct OnionRouter {
     pub identity: [u8; 20],
     pub digest: [u8; 20],
     pub publication: Time,
-    pub ip: IpAddr,
-    pub port: u16,
+    pub target: Target,
     pub directory_port: Option<u16>,
     pub advertise_ipv6: Option<(Ipv6Addr, u16)>,
     pub flags: Vec<OnionRouterFlag>,
@@ -106,8 +105,7 @@ impl fmt::Debug for OnionRouter {
             .field("identity", &identity)
             .field("digest", &digest)
             .field("publication", &self.publication)
-            .field("ip", &self.ip)
-            .field("port", &self.port);
+            .field("target", &self.target);
         if let Some(advertise_ipv6) = self.advertise_ipv6.as_ref() {
             dbg.field("advertise_ipv6", advertise_ipv6);
         }
@@ -144,18 +142,7 @@ impl NomParse for OnionRouter {
 
         let (rest, (_, publication)) = context("publication", tuple((space1, Time::parse)))(rest)?;
 
-        let (rest, (_, ip)) = context(
-            "ip",
-            tuple((
-                space1,
-                map_opt(no_space, |s: &str| s.parse::<IpAddr>().ok()),
-            )),
-        )(rest)?;
-
-        let (rest, (_, port)) = context(
-            "port",
-            tuple((space1, map_opt(digit1, |s: &str| s.parse::<u16>().ok()))),
-        )(rest)?;
+        let (rest, (_, target)) = tuple((space1, Target::parse))(rest)?;
 
         let (rest, (_, dir_port)) = context(
             "dir-port",
@@ -191,8 +178,7 @@ impl NomParse for OnionRouter {
                 identity,
                 digest,
                 publication,
-                ip,
-                port,
+                target,
                 directory_port,
                 advertise_ipv6,
                 flags,
@@ -204,10 +190,7 @@ impl NomParse for OnionRouter {
 
 impl fmt::Display for OnionRouter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.ip {
-            IpAddr::V4(ref ip4) => write!(f, "{}:{}", ip4, self.port),
-            IpAddr::V6(ref ip6) => write!(f, "[{}]:{}", ip6, self.port),
-        }
+        write!(f, "{}", self.target)
     }
 }
 
@@ -238,9 +221,14 @@ mod tests {
                 second: 24,
                 mseconds: 0,
             },
-            ip: IpAddr::V4(Ipv4Addr::new(185, 80, 30, 102)),
-            port: 9001,
+            target: Target {
+                addr: IpAddr::V4(Ipv4Addr::new(185, 80, 30, 102)),
+                port: 9001,
+            },
             directory_port: Some(9030),
+            advertise_ipv6: None,
+            flags: Vec::new(),
+            bandwidth: None,
         };
 
         assert_eq!(OnionRouter::parse(input), Ok(("", or)));

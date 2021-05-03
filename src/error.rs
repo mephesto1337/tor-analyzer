@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(Debug)]
 pub enum Error {
     Connection(torut::control::ConnError),
@@ -109,5 +111,35 @@ impl nom::error::ParseError<&str> for Error {
     }
     fn append(_input: &str, _e: nom::error::ErrorKind, other: Self) -> Self {
         other
+    }
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Connection(ref ce) => write!(f, "Connection: {:?}", ce),
+            Self::Io(ref io) => write!(f, "IO: {}", io),
+            Self::Incomplete(ne) => match ne {
+                nom::Needed::Unknown => write!(f, "Missing bytes"),
+                nom::Needed::Size(ref s) => write!(f, "Missing {} bytes", s),
+            },
+            Self::Parsing {
+                ref data,
+                kind,
+                ref trace,
+            } => {
+                let kind = match kind {
+                    nom::error::VerboseErrorKind::Nom(kind) => format!("{:?}", kind),
+                    nom::error::VerboseErrorKind::Context(ctx) => (*ctx).into(),
+                    nom::error::VerboseErrorKind::Char(c) => format!("Bad char {:?}", c),
+                };
+                write!(f, "Parsing: {} at {:?}", kind, data)?;
+                if let Some(trace) = trace.as_ref() {
+                    write!(f, "\n{}", trace)?;
+                }
+                Ok(())
+            }
+            Self::Base64(be) => write!(f, "Base64: {}", be),
+        }
     }
 }

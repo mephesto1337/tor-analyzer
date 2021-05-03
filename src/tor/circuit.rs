@@ -3,12 +3,13 @@ use std::str::FromStr;
 
 use nom::branch::alt;
 use nom::bytes::complete::{escaped, tag};
-use nom::character::complete::{alphanumeric1, digit1, none_of, one_of, space1};
+use nom::character::complete::{alphanumeric1, none_of, one_of, space1};
 use nom::combinator::{map, map_opt, opt, verify};
 use nom::error::{context, ContextError, ParseError};
 use nom::multi::{count, separated_list1};
 use nom::sequence::tuple;
 
+use crate::tor::common::{CircuitID, Time};
 use crate::tor::utils::{base32_word, parse_hex, word};
 use crate::tor::NomParse;
 
@@ -371,31 +372,6 @@ impl fmt::Display for CircuitReason {
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct CircuitID(String);
-
-impl NomParse for CircuitID {
-    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
-    where
-        E: ParseError<&'a str> + ContextError<&'a str>,
-    {
-        context(
-            "Circuit ID",
-            map(
-                verify(alphanumeric1, |id: &str| id.len() < 16),
-                |id: &str| Self(id.into()),
-            ),
-        )(input)
-    }
-}
-impl_from_str!(CircuitID);
-
-impl fmt::Display for CircuitID {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
-    }
-}
-
 #[derive(Default, Eq, PartialEq)]
 pub struct Step {
     pub fingerprint: [u8; 20],
@@ -497,83 +473,6 @@ impl NomParse for Path {
     }
 }
 impl_from_str!(Path);
-
-#[derive(Debug, Eq, PartialEq)]
-pub struct Time {
-    pub year: u16,
-    pub month: u8,
-    pub day: u8,
-    pub hour: u8,
-    pub minute: u8,
-    pub second: u8,
-    pub mseconds: u32,
-}
-
-impl NomParse for Time {
-    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
-    where
-        E: ParseError<&'a str> + ContextError<&'a str>,
-    {
-        let (rest, (year, _, month, _, day, _, hour, _, minute, _, second)) = context(
-            "Time created",
-            tuple((
-                map(verify(digit1, |s: &str| s.len() == 4), |s: &str| {
-                    s.parse::<u16>().unwrap()
-                }),
-                tag("-"),
-                map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
-                    s.parse::<u8>().unwrap()
-                }),
-                tag("-"),
-                map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
-                    s.parse::<u8>().unwrap()
-                }),
-                alt((tag("T"), tag(" "))),
-                map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
-                    s.parse::<u8>().unwrap()
-                }),
-                tag(":"),
-                map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
-                    s.parse::<u8>().unwrap()
-                }),
-                tag(":"),
-                map(verify(digit1, |s: &str| s.len() <= 2), |s: &str| {
-                    s.parse::<u8>().unwrap()
-                }),
-            )),
-        )(input)?;
-        let (rest, opt_mseconds) = opt(tuple((
-            tag("."),
-            map(verify(digit1, |s: &str| s.len() == 6), |s: &str| {
-                s.parse::<u32>().unwrap()
-            }),
-        )))(rest)?;
-        let mseconds = opt_mseconds.map(|x| x.1).unwrap_or_default();
-
-        Ok((
-            rest,
-            Self {
-                year,
-                month,
-                day,
-                hour,
-                minute,
-                second,
-                mseconds,
-            },
-        ))
-    }
-}
-
-impl fmt::Display for Time {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:06}",
-            self.year, self.month, self.day, self.hour, self.minute, self.second, self.mseconds
-        )
-    }
-}
 
 #[derive(PartialEq, Eq)]
 pub enum HsAddress {

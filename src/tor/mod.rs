@@ -13,8 +13,9 @@ macro_rules! impl_from_str {
 }
 
 pub mod circuit;
-// pub mod control;
+pub mod common;
 pub mod ns;
+pub mod stream;
 mod utils;
 
 pub trait NomParse: Sized {

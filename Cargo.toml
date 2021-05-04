@@ -1,26 +1,2 @@
-[package]
-name = "tor-analyzer"
-version = "0.1.0"
-authors = ["Thomas WACHE <thomas@wache.fr>"]
-edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-[[bin]]
-name = "tor-analyzer"
-
-[[bin]]
-name = "tor-analyzer-gui"
-path = "src/bin/gui.rs"
-
-[dependencies]
-tokio = { version = "1.4", features = ["full"] }
-torut = { git = "https://github.com/mephesto1337/torut.git", branch = "parse_single_key_value_dollar" }
-nom = "6"
-base32 = "0.4"
-base64 = "0.10"
-gtk = "0.9"
-gio = "0.9"
-glib = "0.10"
-
-[build-dependencies]
-bindgen = "*"
+[workspace]
+members = ["gui", "lib"]

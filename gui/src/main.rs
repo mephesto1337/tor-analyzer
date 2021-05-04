@@ -10,22 +10,16 @@ use tokio::net::{TcpStream, UnixStream};
 
 use torut::control::{AsyncEvent, ConnError, UnauthenticatedConn};
 
-use tor_analyzer::country;
-use tor_analyzer::error::Error;
-use tor_analyzer::geoip::GeoIP;
-use tor_analyzer::socket::Socket;
-use tor_analyzer::tor::circuit::Circuit;
-use tor_analyzer::tor::common::Target;
-use tor_analyzer::tor::ns::OnionRouter;
-use tor_analyzer::tor::stream::Stream;
-use tor_analyzer::tor::NomParse;
+use tor_analyzer_lib::country;
+use tor_analyzer_lib::error::Error;
+use tor_analyzer_lib::prelude::*;
 
 mod notebook;
 
 #[derive(Debug)]
 struct SimpleCircuit {
-    id: tor_analyzer::tor::common::CircuitID,
-    state: tor_analyzer::tor::circuit::CircuitStatus,
+    id: CircuitID,
+    state: tor_analyzer_lib::tor::circuit::CircuitStatus,
     path: Vec<OnionRouter>,
     endpoint: Option<Target>,
 }
@@ -210,7 +204,7 @@ fn localize_target(writer: &mut String, target: &Target, gi: &GeoIP) {
 
 fn update_model(store: &gtk::ListStore) {
     let data = get_circuits();
-    let gi = tor_analyzer::geoip::GeoIP::new();
+    let gi = GeoIP::new();
 
     store.clear();
 

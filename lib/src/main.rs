@@ -4,9 +4,10 @@ use std::path::Path;
 
 use tokio::net::{TcpStream, UnixStream};
 
-use tor_analyzer::error::Error;
-use tor_analyzer::geoip::GeoIP;
-use tor_analyzer::socket::Socket;
+use tor_analyzer_lib::error::Error;
+use tor_analyzer_lib::geoip::GeoIP;
+use tor_analyzer_lib::socket::Socket;
+use tor_analyzer_lib::tor::NomParse;
 use torut::control::{AsyncEvent, ConnError, UnauthenticatedConn};
 
 async fn event_handler(event: AsyncEvent<'static>) -> Result<(), ConnError> {
@@ -52,7 +53,9 @@ async fn run() -> Result<(), Error> {
     let mut rest_circuits = circuits.as_str();
     let mut count = 0usize;
     while !rest_circuits.is_empty() {
-        let (rest, c) = tor_analyzer::tor::circuit::Circuit::parse(rest_circuits)?;
+        let (rest, c) = tor_analyzer_lib::tor::circuit::Circuit::parse::<
+            nom::error::VerboseError<&str>,
+        >(rest_circuits)?;
         println!("{:2}: {}", count, c);
         rest_circuits = rest;
         count += 1;

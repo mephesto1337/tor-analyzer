@@ -12,9 +12,12 @@ macro_rules! impl_from_str {
     };
 }
 
+pub mod auth;
 pub mod circuit;
 pub mod common;
+pub mod conn;
 pub mod ns;
+pub mod protocol;
 pub mod stream;
 mod utils;
 

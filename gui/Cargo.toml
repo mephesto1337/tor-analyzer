@@ -10,9 +10,7 @@ name = "tor-analyzer-gui"
 
 [dependencies]
 tokio = { version = "1.4", features = ["full"] }
-torut = "0.1"
 gtk = "0.9"
 gio = "0.9"
 glib = "0.10"
-nom = "6"
 tor-analyzer-lib = { path = "../lib" }

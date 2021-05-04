@@ -3,6 +3,7 @@ use std::fmt;
 #[derive(Debug)]
 pub enum Error {
     Connection(torut::control::ConnError),
+    Protocol(u16),
     Io(std::io::Error),
     Incomplete(nom::Needed),
     Parsing {
@@ -12,6 +13,8 @@ pub enum Error {
     },
     Base64(base64::DecodeError),
 }
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 impl std::convert::From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
@@ -118,6 +121,7 @@ impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Connection(ref ce) => write!(f, "Connection: {:?}", ce),
+            Self::Protocol(ref code) => write!(f, "Protocol error: code={}", code),
             Self::Io(ref io) => write!(f, "IO: {}", io),
             Self::Incomplete(ne) => match ne {
                 nom::Needed::Unknown => write!(f, "Missing bytes"),

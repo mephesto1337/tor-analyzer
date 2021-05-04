@@ -1,6 +1,8 @@
-use nom::bytes::complete::{take, take_while};
+use nom::bytes::complete::{escaped, tag, take, take_while};
+use nom::character::complete::{none_of, one_of};
 use nom::combinator::map_opt;
 use nom::error::{ContextError, ParseError};
+use nom::sequence::tuple;
 
 pub(crate) fn word<'a, E>(s: &'a str) -> nom::IResult<&'a str, &'a str, E>
 where
@@ -49,4 +51,17 @@ where
         x
     })(s)?;
     Ok((rest, h))
+}
+
+pub(crate) fn quoted_string<'a, E>(s: &'a str) -> nom::IResult<&'a str, &'a str, E>
+where
+    E: ParseError<&'a str> + ContextError<&'a str>,
+{
+    let (rest, (_, string, _)) = tuple((
+        tag("\""),
+        escaped(none_of("\\\""), '\\', one_of("\\\"")),
+        tag("\""),
+    ))(s)?;
+
+    Ok((rest, string))
 }

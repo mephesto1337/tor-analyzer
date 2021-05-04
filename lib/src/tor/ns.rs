@@ -13,10 +13,11 @@ use crate::tor::common::{Target, Time};
 use crate::tor::utils::{base64_word, word};
 use crate::tor::NomParse;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
+#[repr(u32)]
 pub enum OnionRouterFlag {
     /// if the router is a directory authority.
-    Authority,
+    Authority = 0,
 
     /// if the router is believed to be useless as an exit node (because its ISP censors it, because it is behind a restrictive proxy, or for some similar reason).
     BadExit,
@@ -77,6 +78,95 @@ impl NomParse for OnionRouterFlag {
     }
 }
 
+impl fmt::Display for OnionRouterFlag {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Authority => write!(f, "Authority"),
+            Self::BadExit => write!(f, "BadExit"),
+            Self::Exit => write!(f, "Exit"),
+            Self::Fast => write!(f, "Fast"),
+            Self::Guard => write!(f, "Guard"),
+            Self::HSDir => write!(f, "HSDir"),
+            Self::NoEdConsensus => write!(f, "NoEdConsensus"),
+            Self::Stable => write!(f, "Stable"),
+            Self::StaleDesc => write!(f, "StaleDesc"),
+            Self::Running => write!(f, "Running"),
+            Self::Valid => write!(f, "Valid"),
+            Self::V2Dir => write!(f, "V2Dir"),
+        }
+    }
+}
+
+#[derive(Default, Eq, PartialEq, Clone, Copy)]
+pub struct OnionRouterFlags {
+    flags: u32,
+}
+
+impl OnionRouterFlags {
+    pub fn new() -> Self {
+        Self { flags: 0 }
+    }
+
+    pub fn set(&mut self, flag: OnionRouterFlag) -> &mut Self {
+        let flag = 1 << (flag as u32);
+        self.flags |= flag;
+        self
+    }
+
+    pub fn or(&mut self, other: OnionRouterFlags) -> &mut Self {
+        self.flags |= other.flags;
+        self
+    }
+
+    pub fn and(&mut self, other: OnionRouterFlags) -> &mut Self {
+        self.flags &= other.flags;
+        self
+    }
+
+    pub fn remove(&mut self, flag: OnionRouterFlag) -> &mut Self {
+        let flag = u32::MAX ^ (1u32 << (flag as u32));
+        self.flags &= flag;
+        self
+    }
+
+    pub fn is_set(&self, flag: OnionRouterFlag) -> bool {
+        let flag = 1u32 << (flag as u32);
+        self.flags & flag == flag
+    }
+}
+
+impl fmt::Display for OnionRouterFlags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let flags = [
+            OnionRouterFlag::Authority,
+            OnionRouterFlag::BadExit,
+            OnionRouterFlag::Exit,
+            OnionRouterFlag::Fast,
+            OnionRouterFlag::Guard,
+            OnionRouterFlag::HSDir,
+            OnionRouterFlag::NoEdConsensus,
+            OnionRouterFlag::Stable,
+            OnionRouterFlag::StaleDesc,
+            OnionRouterFlag::Running,
+            OnionRouterFlag::Valid,
+            OnionRouterFlag::V2Dir,
+        ];
+        let mut first = true;
+        for flag in flags.iter() {
+            if self.is_set(*flag) {
+                if first {
+                    first = false;
+                    write!(f, "{}", flag)?;
+                } else {
+                    write!(f, "|{}", flag)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Eq, PartialEq)]
 pub struct OnionRouter {
     pub nickname: String,
@@ -86,9 +176,10 @@ pub struct OnionRouter {
     pub target: Target,
     pub directory_port: Option<u16>,
     pub advertise_ipv6: Option<(Ipv6Addr, u16)>,
-    pub flags: Vec<OnionRouterFlag>,
+    pub flags: OnionRouterFlags,
     pub bandwidth: Option<u32>,
 }
+
 impl fmt::Display for OnionRouter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "$")?;
@@ -118,7 +209,7 @@ impl fmt::Debug for OnionRouter {
         if let Some(advertise_ipv6) = self.advertise_ipv6.as_ref() {
             dbg.field("advertise_ipv6", advertise_ipv6);
         }
-        dbg.field("flags", &self.flags);
+        dbg.field("flags", &format!("{}", self.flags));
         if let Some(bandwidth) = self.bandwidth.as_ref() {
             dbg.field("bandwidth", bandwidth);
         }
@@ -170,8 +261,11 @@ impl NomParse for OnionRouter {
         )))(rest)?;
         let advertise_ipv6 = opt_advertise_ipv6.map(|x| (x.1, x.3));
 
+        let mut flags = OnionRouterFlags::new();
         let (rest, _newline_tag) = tag("\r\ns")(rest)?;
-        let (rest, flags) = many0(map(tuple((space1, OnionRouterFlag::parse)), |(_, f)| f))(rest)?;
+        let (rest, _) = many0(map(tuple((space1, OnionRouterFlag::parse)), |(_, f)| {
+            flags.set(f);
+        }))(rest)?;
 
         let (rest, opt_bandwidth) = opt(tuple((
             tag("\r\nw Bandwidth="),
@@ -200,7 +294,7 @@ impl NomParse for OnionRouter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::Ipv4Addr;
+    use std::net::{IpAddr, Ipv4Addr};
 
     #[test]
     fn onion_router() {
@@ -230,10 +324,13 @@ mod tests {
             },
             directory_port: Some(9030),
             advertise_ipv6: None,
-            flags: Vec::new(),
+            flags: OnionRouterFlags::new(),
             bandwidth: None,
         };
 
-        assert_eq!(OnionRouter::parse(input), Ok(("", or)));
+        assert_eq!(
+            OnionRouter::parse::<nom::error::VerboseError<&str>>(input),
+            Ok(("", or))
+        );
     }
 }

@@ -89,6 +89,15 @@ pub struct OnionRouter {
     pub flags: Vec<OnionRouterFlag>,
     pub bandwidth: Option<u32>,
 }
+impl fmt::Display for OnionRouter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "$")?;
+        for byte in self.identity.iter() {
+            write!(f, "{:02x}", *byte)?;
+        }
+        write!(f, "~{}", self.nickname)
+    }
+}
 
 impl fmt::Debug for OnionRouter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -185,12 +194,6 @@ impl NomParse for OnionRouter {
                 bandwidth,
             },
         ))
-    }
-}
-
-impl fmt::Display for OnionRouter {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.target)
     }
 }
 

@@ -1,6 +1,5 @@
 use std::env;
 use std::io;
-use std::net::IpAddr;
 use std::path::Path;
 use std::rc::Rc;
 
@@ -21,14 +20,14 @@ use tor_analyzer::tor::ns::OnionRouter;
 use tor_analyzer::tor::stream::Stream;
 use tor_analyzer::tor::NomParse;
 
-const FIELD_COUNT: usize = 4;
+mod notebook;
 
 #[derive(Debug)]
 struct SimpleCircuit {
     id: tor_analyzer::tor::common::CircuitID,
     state: tor_analyzer::tor::circuit::CircuitStatus,
     path: Vec<OnionRouter>,
-    endpoint: Target,
+    endpoint: Option<Target>,
 }
 
 #[derive(Debug)]
@@ -36,9 +35,13 @@ struct SimpleCircuit {
 enum Columns {
     Id,
     Status,
+    Ips,
+    Countries,
     Path,
     EndPoint,
+    MaxColumns,
 }
+const FIELD_COUNT: usize = Columns::MaxColumns as usize;
 
 macro_rules! add_column {
     ($treeview:expr, $variant:expr, $name:expr) => {{
@@ -48,7 +51,10 @@ macro_rules! add_column {
         column.set_title($name);
         column.add_attribute(&renderer, "text", $variant as i32);
         column.set_sort_column_id($variant as i32);
+        column.set_sort_indicator(true);
+        column.set_clickable(true);
         $treeview.append_column(&column);
+        column
     }};
 }
 
@@ -60,8 +66,10 @@ fn build_ui(application: &gtk::Application) {
     window.set_position(gtk::WindowPosition::Center);
     window.set_default_size(350, 70);
 
+    let mut notebook = notebook::Notebook::new();
+
     let vbox = gtk::Box::new(gtk::Orientation::Vertical, 8);
-    window.add(&vbox);
+    window.add(&notebook.notebook);
 
     let sw = gtk::ScrolledWindow::new(None::<&gtk::Adjustment>, None::<&gtk::Adjustment>);
     sw.set_shadow_type(gtk::ShadowType::EtchedIn);
@@ -78,6 +86,8 @@ fn build_ui(application: &gtk::Application) {
     sw.add(&treeview);
     add_column!(treeview, Columns::Id, "Id");
     add_column!(treeview, Columns::Status, "Status");
+    add_column!(treeview, Columns::Ips, "IPs");
+    add_column!(treeview, Columns::Countries, "Countries");
     add_column!(treeview, Columns::Path, "Path");
     add_column!(treeview, Columns::EndPoint, "End point");
 
@@ -91,6 +101,7 @@ fn build_ui(application: &gtk::Application) {
     // Fill table
     update_btn.clicked();
 
+    notebook.create_tab("Circuits", vbox.upcast::<gtk::Widget>(), false);
     window.show_all();
 }
 
@@ -128,14 +139,15 @@ async fn async_get_circuits() -> Result<Vec<SimpleCircuit>, Error> {
     let mut conn = anon_conn.into_authenticated().await;
     conn.set_async_event_handler(Some(event_handler));
 
+    let stream_string = conn.get_info("stream-status").await?;
     let circuits_string = conn.get_info("circuit-status").await?;
+
     let (_rest, mut circuits) = nom::multi::many1(
         Circuit::parse::<nom::error::VerboseError<&str>>,
     )(circuits_string.as_str())?;
 
-    let stream_str = conn.get_info("stream-status").await?;
     let (_, streams) =
-        nom::multi::many0(Stream::parse::<nom::error::VerboseError<&str>>)(stream_str.as_str())?;
+        nom::multi::many0(Stream::parse::<nom::error::VerboseError<&str>>)(stream_string.as_str())?;
 
     let mut simple_circuits = Vec::with_capacity(circuits.len());
     for mut c in circuits.drain(..) {
@@ -148,22 +160,13 @@ async fn async_get_circuits() -> Result<Vec<SimpleCircuit>, Error> {
             path.push(or);
         }
 
-        let endpoint = match streams.iter().find_map(|s| {
+        let endpoint = streams.iter().find_map(|s| {
             if s.circuit_id == c.id {
                 Some(s.target.clone())
             } else {
                 None
             }
-        }) {
-            Some(ep) => ep,
-            None => {
-                eprintln!("Cannot find circuit id {}", c.id);
-                Target {
-                    addr: IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-                    port: 0,
-                }
-            }
-        };
+        });
 
         simple_circuits.push(SimpleCircuit {
             id: c.id,
@@ -194,17 +197,14 @@ fn get_circuits() -> Vec<SimpleCircuit> {
 }
 
 fn localize_target(writer: &mut String, target: &Target, gi: &GeoIP) {
-    writer.push_str(&format!("{}", target));
     if let Some(loc) = gi.lookup_ip(target.addr) {
-        writer.push_str(" (");
         if let Some(country) = country::get_country(loc) {
-            writer.push_str(country.name);
+            writer.push_str(country.flag);
             writer.push(' ');
-            writer.push_str(country.flag)
+            writer.push_str(country.name);
         } else {
             writer.push_str(loc);
         }
-        writer.push(')');
     }
 }
 
@@ -223,19 +223,31 @@ fn update_model(store: &gtk::ListStore) {
         eprintln!("Got circuit: {:?}", d);
         let id = format!("{}", d.id);
         let state = format!("{}", d.state);
-        let mut path = String::new();
+        let mut paths = String::new();
+        let mut ips = String::new();
+        let mut countries = String::new();
         let mut first = true;
         for p in &d.path {
             if !first {
-                path.push('\n');
+                countries.push('\n');
+                paths.push('\n');
+                ips.push('\n');
             }
             first = false;
-            localize_target(&mut path, &p.target, &gi);
+            localize_target(&mut countries, &p.target, &gi);
+            ips.push_str(&format!("{}", p.target));
+            paths.push_str(&format!("{}", p));
         }
-        let mut endpoint = String::new();
-        localize_target(&mut endpoint, &d.endpoint, &gi);
+        let endpoint = if let Some(ref ep) = d.endpoint {
+            let mut endpoint = format!("{} ", ep);
+            localize_target(&mut endpoint, ep, &gi);
+            endpoint
+        } else {
+            String::new()
+        };
 
-        let values: [&dyn ToValue; FIELD_COUNT] = [&id, &state, &path, &endpoint];
+        let values: [&dyn ToValue; FIELD_COUNT] =
+            [&id, &state, &ips, &countries, &paths, &endpoint];
         store.set(&store.append(), &indexes[..], &values);
     }
 }

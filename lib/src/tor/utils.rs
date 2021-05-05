@@ -1,3 +1,5 @@
+use std::fmt;
+
 use nom::bytes::complete::{escaped, tag, take, take_while};
 use nom::character::complete::{none_of, one_of};
 use nom::combinator::map_opt;
@@ -64,4 +66,32 @@ where
     ))(s)?;
 
     Ok((rest, string))
+}
+
+pub(crate) fn hex_encode_inplace<F: std::fmt::Write, B: AsRef<[u8]>>(
+    f: &mut F,
+    s: B,
+) -> fmt::Result {
+    let bytes = s.as_ref();
+    for b in bytes.iter() {
+        write!(f, "{:02X}", b)?;
+    }
+    Ok(())
+}
+
+pub fn hex_encode<B: AsRef<[u8]>>(s: B) -> String {
+    let bytes = s.as_ref();
+    let mut hex = String::with_capacity(bytes.len() * 2);
+    hex_encode_inplace(&mut hex, bytes).unwrap();
+    hex
+}
+
+pub(crate) fn parse_single_key_value(s: &str) -> Option<(&str, &str)> {
+    if let Some(idx) = s.find('=') {
+        let key = &s[..idx];
+        let val = &s[(idx + 1)..];
+        Some((key, val))
+    } else {
+        None
+    }
 }

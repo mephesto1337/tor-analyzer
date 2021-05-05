@@ -9,8 +9,8 @@ edition = "2018"
 name = "tor-analyzer-gui"
 
 [dependencies]
-tokio = { version = "1.4", features = ["full"] }
 gtk = "0.9"
+gdk = "0.13"
 gio = "0.9"
 glib = "0.10"
 tor-analyzer-lib = { path = "../lib" }

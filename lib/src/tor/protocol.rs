@@ -8,7 +8,7 @@ use nom::sequence::tuple;
 use crate::tor::NomParse;
 
 #[derive(Debug, Eq, PartialEq)]
-pub(crate) struct StatusCode(u16);
+pub(crate) struct StatusCode(pub(crate) u16);
 
 impl NomParse for StatusCode {
     fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>

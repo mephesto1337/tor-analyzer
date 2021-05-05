@@ -1,4 +1,3 @@
-use std::env;
 use std::rc::Rc;
 
 use gio::prelude::*;
@@ -7,7 +6,6 @@ use gtk::prelude::*;
 use tor_analyzer_lib::country;
 use tor_analyzer_lib::error::Error;
 use tor_analyzer_lib::prelude::*;
-use tor_analyzer_lib::TorController;
 
 #[derive(Debug)]
 struct SimpleCircuit {
@@ -30,13 +28,12 @@ enum Columns {
 }
 const FIELD_COUNT: usize = Columns::MaxColumns as usize;
 
-async fn async_get_circuits() -> Result<Vec<SimpleCircuit>, Error> {
-    let mutex = crate::get_controller();
+fn get_circuits() -> Result<Vec<SimpleCircuit>, Error> {
+    let mutex = crate::get_tor_controller();
     let mut ctrl = mutex.lock().unwrap();
-    ctrl.set_async_event_handler(tor_analyzer_lib::void_async_event_handler);
 
-    let mut circuits = ctrl.get_circuits().await?;
-    let streams = ctrl.get_streams().await?;
+    let mut circuits = ctrl.get_circuits()?;
+    let streams = ctrl.get_streams()?;
     drop(ctrl);
 
     let mut simple_circuits = Vec::with_capacity(circuits.len());
@@ -46,7 +43,7 @@ async fn async_get_circuits() -> Result<Vec<SimpleCircuit>, Error> {
         for mut step in c.path.drain(..) {
             step.nickname = None;
             let mut ctrl = mutex.lock().unwrap();
-            let or = ctrl.get_onion_router(&step).await?;
+            let or = ctrl.get_onion_router(&step)?;
             drop(ctrl);
             path.push(or);
         }
@@ -70,17 +67,6 @@ async fn async_get_circuits() -> Result<Vec<SimpleCircuit>, Error> {
     Ok(simple_circuits)
 }
 
-fn get_circuits() -> Vec<SimpleCircuit> {
-    let mut circuits = Vec::new();
-
-    crate::get_runtime().spawn_blocking(async move || match async_get_circuits().await {
-        Ok(mut c) => circuits.extend(c.drain(..)),
-        Err(e) => eprintln!("Error: {}", e),
-    });
-
-    circuits
-}
-
 fn localize_target(writer: &mut String, target: &Target, gi: &GeoIP) {
     if let Some(loc) = gi.lookup_ip(target.addr) {
         if let Some(country) = country::get_country(loc) {
@@ -94,7 +80,13 @@ fn localize_target(writer: &mut String, target: &Target, gi: &GeoIP) {
 }
 
 fn update_model(store: &gtk::ListStore) {
-    let data = get_circuits();
+    let data = match get_circuits() {
+        Ok(circuits) => circuits,
+        Err(e) => {
+            eprintln!("{}", e);
+            return;
+        }
+    };
     let gi = GeoIP::new();
 
     store.clear();
@@ -104,8 +96,6 @@ fn update_model(store: &gtk::ListStore) {
         *idx = i as u32;
     }
     for d in data.iter() {
-        #[cfg(debug_assertions)]
-        eprintln!("Got circuit: {:?}", d);
         let id = format!("{}", d.id);
         let state = format!("{}", d.state);
         let mut paths = String::new();
@@ -139,6 +129,12 @@ fn update_model(store: &gtk::ListStore) {
 
 pub fn create_tab() -> gtk::Widget {
     let vbox = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    vbox.set_homogeneous(false);
+
+    let search_entry = Rc::new(gtk::Entry::new());
+    search_entry.set_placeholder_text(Some("Enter text here to filter results"));
+    vbox.add(&*Rc::clone(&search_entry));
+
     let sw = gtk::ScrolledWindow::new(None::<&gtk::Adjustment>, None::<&gtk::Adjustment>);
     sw.set_shadow_type(gtk::ShadowType::EtchedIn);
     sw.set_policy(gtk::PolicyType::Automatic, gtk::PolicyType::Automatic);
@@ -147,11 +143,19 @@ pub fn create_tab() -> gtk::Widget {
     let col_types = [glib::Type::String; FIELD_COUNT];
     let store = Rc::new(gtk::ListStore::new(&col_types));
 
-    let treeview = gtk::TreeView::with_model(&*store.clone());
+    let treefilter = Rc::new(gtk::TreeModelFilter::new(&*Rc::clone(&store), None));
+    let search_entry_copy = Rc::clone(&search_entry);
+    treefilter.set_visible_func(move |model, iter| -> bool {
+        let filter = search_entry_copy.get_text().as_str().to_lowercase();
+
+        crate::filter_func(filter, model, iter)
+    });
+    let treeview = gtk::TreeView::with_model(&*Rc::clone(&treefilter));
     treeview.set_vexpand(true);
     treeview.set_search_column(Columns::Id as i32);
-
     sw.add(&treeview);
+    search_entry.connect_changed(move |_| treefilter.refilter());
+
     add_column!(treeview, Columns::Id, "Id");
     add_column!(treeview, Columns::Status, "Status");
     add_column!(treeview, Columns::Ips, "IPs");

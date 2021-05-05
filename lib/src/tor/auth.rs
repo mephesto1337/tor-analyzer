@@ -2,10 +2,11 @@ use nom::branch::alt;
 use nom::bytes::complete::tag;
 use nom::combinator::{map, opt};
 use nom::error::{context, ContextError, ParseError};
-use nom::multi::separated_list1;
+use nom::multi::{count, separated_list1};
 use nom::sequence::tuple;
+use std::fmt;
 
-use crate::tor::utils::quoted_string;
+use crate::tor::utils::{hex_encode, parse_hex, quoted_string};
 use crate::tor::NomParse;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -53,7 +54,8 @@ impl NomParse for ProtocolInfo {
     where
         E: ParseError<&'a str> + ContextError<&'a str>,
     {
-        let (rest, _) = tag("AUTH METHODS=")(input)?;
+        let (rest, _) = tag("PROTOCOLINFO 1\r\n")(input)?;
+        let (rest, _) = tag("AUTH METHODS=")(rest)?;
         let (rest, auth_methods) = separated_list1(tag(","), AuthMethods::parse)(rest)?;
         let (rest, cookie_file) = opt(map(tuple((tag(" COOKIEFILE="), quoted_string)), |x| {
             String::from(x.1)
@@ -78,6 +80,45 @@ impl NomParse for ProtocolInfo {
     }
 }
 
+#[derive(Eq, PartialEq, Default)]
+pub struct AuthChallengeResponse {
+    pub server_hash: [u8; 32],
+    pub server_nonce: [u8; 32],
+}
+
+impl fmt::Debug for AuthChallengeResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("AuthChallengeResponse")
+            .field("server_hash", &hex_encode(self.server_hash))
+            .field("server_nonce", &hex_encode(self.server_nonce))
+            .finish()
+    }
+}
+
+impl NomParse for AuthChallengeResponse {
+    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
+        let (rest, _) = tag("AUTHCHALLENGE ")(input)?;
+        let (rest, server_hash) = context(
+            "Server hash",
+            map(tuple((tag("SERVERHASH="), count(parse_hex, 32))), |x| x.1),
+        )(rest)?;
+
+        let (rest, server_nonce) = context(
+            "Server hash",
+            map(tuple((tag(" SERVERNONCE="), count(parse_hex, 32))), |x| x.1),
+        )(rest)?;
+
+        let mut me = Self::default();
+        me.server_hash.copy_from_slice(&server_hash[..]);
+        me.server_nonce.copy_from_slice(&server_nonce[..]);
+
+        Ok((rest, me))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,19 +139,3 @@ mod tests {
         );
     }
 }
-/*
-    fn retrieve_protocol_info(&mut self) -> Result<&ProtocolInfo, Error> {
-        let response = self.send_command("PROTOCOLINFO 2")?;
-        eprintln!("Response: {:?}", response);
-        self.protocol_info = Some(ProtocolInfo::default());
-        Ok(self.protocol_info.as_ref().unwrap())
-    }
-
-    pub fn protocol_info(&mut self) -> Result<&ProtocolInfo, Error> {
-        if let Some(ref pi) = self.protocol_info {
-            return Ok(pi);
-        }
-        self.retrieve_protocol_info()
-    }
-
-*/

@@ -10,7 +10,7 @@ use nom::multi::{count, separated_list1};
 use nom::sequence::tuple;
 
 use crate::tor::common::{CircuitID, Time};
-use crate::tor::utils::{base32_word, parse_hex, word};
+use crate::tor::utils::{base32_word, hex_encode, hex_encode_inplace, parse_hex, word};
 use crate::tor::NomParse;
 
 #[derive(Debug, Eq, PartialEq)]
@@ -380,12 +380,8 @@ pub struct Step {
 
 impl fmt::Debug for Step {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut fingerprint = String::with_capacity(self.fingerprint.len() * 2);
-        for byte in self.fingerprint.iter() {
-            fingerprint.push_str(format!("{:02x}", *byte).as_str());
-        }
         f.debug_struct("Step")
-            .field("fingerprint", &fingerprint)
+            .field("fingerprint", &hex_encode(self.fingerprint))
             .field("nickname", &self.nickname)
             .finish()
     }
@@ -393,9 +389,8 @@ impl fmt::Debug for Step {
 
 impl fmt::Display for Step {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for byte in self.fingerprint.iter() {
-            f.write_fmt(format_args!("{:02X}", *byte))?;
-        }
+        f.write_char('$')?;
+        hex_encode_inplace(f, self.fingerprint)?;
         if let Some(ref nickname) = self.nickname {
             f.write_char('~')?;
             f.write_str(nickname)?;
@@ -595,12 +590,8 @@ impl NomParse for Circuit {
     where
         E: ParseError<&'a str> + ContextError<&'a str>,
     {
-        let (rest, (_, circuit_id, _, status)) = tuple((
-            opt(tag("\r\n")),
-            CircuitID::parse,
-            space1,
-            CircuitStatus::parse,
-        ))(s)?;
+        let (rest, (circuit_id, _, status)) =
+            tuple((CircuitID::parse, space1, CircuitStatus::parse))(s)?;
 
         let (rest, opt_path) = context("Path", opt(tuple((space1, Path::parse))))(rest)?;
         let path = opt_path.map(|x| x.1).unwrap_or_default();
@@ -665,6 +656,8 @@ impl NomParse for Circuit {
             ))),
         )(rest)?;
         let socks_password = opt_socks_password.map(|x| x.2.to_owned());
+
+        let (rest, _newline) = context("newline at end of circuit", tag("\r\n"))(rest)?;
 
         Ok((
             rest,

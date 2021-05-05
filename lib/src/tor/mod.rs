@@ -19,7 +19,7 @@ pub mod conn;
 pub mod ns;
 pub mod protocol;
 pub mod stream;
-mod utils;
+pub mod utils;
 
 pub trait NomParse: Sized {
     fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>

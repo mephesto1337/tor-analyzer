@@ -1,0 +1,9 @@
+@binding-set gtk-notebook-window
+{
+    bind "<ctrl>n" { "change-current-page" (1) };
+    bind "<ctrl>p" { "change-current-page" (-1) };
+}
+
+entry {
+  -gtk-key-bindings: gtk-notebook-window;
+}

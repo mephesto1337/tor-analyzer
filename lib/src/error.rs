@@ -1,9 +1,10 @@
+use crate::tor::conn::Response;
 use std::fmt;
 
 #[derive(Debug)]
 pub enum Error {
-    Connection(torut::control::ConnError),
-    Protocol(u16),
+    ServerResponse(u16, String),
+    Protocol(String),
     Io(std::io::Error),
     Incomplete(nom::Needed),
     Parsing {
@@ -16,15 +17,15 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-impl std::convert::From<std::io::Error> for Error {
-    fn from(e: std::io::Error) -> Self {
-        Self::Io(e)
+impl std::convert::From<Response> for Error {
+    fn from(r: Response) -> Self {
+        Self::ServerResponse(r.code, r.data)
     }
 }
 
-impl std::convert::From<torut::control::ConnError> for Error {
-    fn from(e: torut::control::ConnError) -> Self {
-        Self::Connection(e)
+impl std::convert::From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
     }
 }
 
@@ -120,8 +121,14 @@ impl nom::error::ParseError<&str> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Connection(ref ce) => write!(f, "Connection: {:?}", ce),
-            Self::Protocol(ref code) => write!(f, "Protocol error: code={}", code),
+            Self::Protocol(ref string) => write!(f, "Protocol error: {}", string),
+            Self::ServerResponse(ref code, ref message) => {
+                write!(
+                    f,
+                    "Protocol error: invalid server response code={}: {}",
+                    code, message
+                )
+            }
             Self::Io(ref io) => write!(f, "IO: {}", io),
             Self::Incomplete(ne) => match ne {
                 nom::Needed::Unknown => write!(f, "Missing bytes"),

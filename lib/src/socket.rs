@@ -1,11 +1,54 @@
-use std::pin::Pin;
-use std::task::Poll;
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::net::{TcpStream, UnixStream};
+use std::io::{self, Read, Write};
+use std::net::TcpStream;
+
+#[cfg(any(
+    doc,
+    target_os = "android",
+    target_os = "dragonfly",
+    target_os = "emscripten",
+    target_os = "freebsd",
+    target_os = "linux",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
+use std::os::unix::net::UnixStream;
 
 pub enum Socket {
     Net(TcpStream),
+    #[cfg(any(
+        doc,
+        target_os = "android",
+        target_os = "dragonfly",
+        target_os = "emscripten",
+        target_os = "freebsd",
+        target_os = "linux",
+        target_os = "netbsd",
+        target_os = "openbsd",
+    ))]
     Unix(UnixStream),
+}
+
+impl Socket {
+    pub fn new<S: AsRef<str>>(s: S) -> io::Result<Self> {
+        let s = s.as_ref();
+        #[cfg(any(
+            doc,
+            target_os = "android",
+            target_os = "dragonfly",
+            target_os = "emscripten",
+            target_os = "freebsd",
+            target_os = "linux",
+            target_os = "netbsd",
+            target_os = "openbsd",
+        ))]
+        {
+            let path = std::path::Path::new(s);
+            if path.exists() {
+                return Ok(Self::Unix(UnixStream::connect(s)?));
+            }
+        }
+        Ok(Self::Net(TcpStream::connect(s)?))
+    }
 }
 
 impl std::convert::From<TcpStream> for Socket {
@@ -14,54 +57,73 @@ impl std::convert::From<TcpStream> for Socket {
     }
 }
 
+#[cfg(any(
+    doc,
+    target_os = "android",
+    target_os = "dragonfly",
+    target_os = "emscripten",
+    target_os = "freebsd",
+    target_os = "linux",
+    target_os = "netbsd",
+    target_os = "openbsd",
+))]
 impl std::convert::From<UnixStream> for Socket {
     fn from(s: UnixStream) -> Self {
         Self::Unix(s)
     }
 }
 
-impl AsyncRead for Socket {
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::result::Result<(), std::io::Error>> {
-        match self.get_mut() {
-            Self::Net(ref mut s) => AsyncRead::poll_read(Pin::new(s), cx, buf),
-            Self::Unix(ref mut s) => AsyncRead::poll_read(Pin::new(s), cx, buf),
+impl Read for Socket {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match self {
+            Self::Net(ref mut tcp) => tcp.read(buf),
+            #[cfg(any(
+                doc,
+                target_os = "android",
+                target_os = "dragonfly",
+                target_os = "emscripten",
+                target_os = "freebsd",
+                target_os = "linux",
+                target_os = "netbsd",
+                target_os = "openbsd",
+            ))]
+            Self::Unix(ref mut unix) => unix.read(buf),
         }
     }
 }
 
-impl AsyncWrite for Socket {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> Poll<std::result::Result<usize, std::io::Error>> {
-        match self.get_mut() {
-            Self::Net(ref mut s) => AsyncWrite::poll_write(Pin::new(s), cx, buf),
-            Self::Unix(ref mut s) => AsyncWrite::poll_write(Pin::new(s), cx, buf),
+impl Write for Socket {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match self {
+            Self::Net(ref mut tcp) => tcp.write(buf),
+            #[cfg(any(
+                doc,
+                target_os = "android",
+                target_os = "dragonfly",
+                target_os = "emscripten",
+                target_os = "freebsd",
+                target_os = "linux",
+                target_os = "netbsd",
+                target_os = "openbsd",
+            ))]
+            Self::Unix(ref mut unix) => unix.write(buf),
         }
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<std::result::Result<(), std::io::Error>> {
-        match self.get_mut() {
-            Self::Net(ref mut s) => AsyncWrite::poll_flush(Pin::new(s), cx),
-            Self::Unix(ref mut s) => AsyncWrite::poll_flush(Pin::new(s), cx),
-        }
-    }
-
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<std::result::Result<(), std::io::Error>> {
-        match self.get_mut() {
-            Self::Net(ref mut s) => AsyncWrite::poll_shutdown(Pin::new(s), cx),
-            Self::Unix(ref mut s) => AsyncWrite::poll_shutdown(Pin::new(s), cx),
+    fn flush(&mut self) -> io::Result<()> {
+        match self {
+            Self::Net(ref mut tcp) => tcp.flush(),
+            #[cfg(any(
+                doc,
+                target_os = "android",
+                target_os = "dragonfly",
+                target_os = "emscripten",
+                target_os = "freebsd",
+                target_os = "linux",
+                target_os = "netbsd",
+                target_os = "openbsd",
+            ))]
+            Self::Unix(ref mut unix) => unix.flush(),
         }
     }
 }

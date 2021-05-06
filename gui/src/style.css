@@ -1,9 +1,17 @@
-@binding-set gtk-notebook-window
-{
-    bind "<ctrl>n" { "change-current-page" (1) };
-    bind "<ctrl>p" { "change-current-page" (-1) };
+@binding-set gtk-notebook-window {
+    bind "<Control>Tab" { "change-current-page" (1) };
+    bind "<Control><Shift>Tab" { "change-current-page" (-1) };
+    bind "<Control>f" { "change-current-page" (0) };
 }
 
-entry {
+@binding-set gtk-root {
+    unbind "<Control>f";
+}
+
+notebook {
   -gtk-key-bindings: gtk-notebook-window;
+}
+
+window {
+  -gtk-key-bindings: gtk-root;
 }

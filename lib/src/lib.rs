@@ -5,13 +5,14 @@ pub mod geoip;
 pub mod socket;
 pub mod tor;
 
-use crate::tor::ns::OnionRouter;
-use crate::tor::stream::Stream;
 use error::Result;
 use socket::Socket;
+use tor::circuit::Circuit;
+use tor::conn::Connection;
 use tor::NomParse;
-use tor::{circuit::Circuit, conn::Connection};
 
+use crate::tor::ns::OnionRouter;
+use crate::tor::stream::Stream;
 pub mod prelude {
     pub use crate::geoip::GeoIP;
     pub use crate::socket::Socket;
@@ -40,9 +41,13 @@ impl TorController {
 
     pub fn get_circuits(&mut self) -> Result<Vec<Circuit>> {
         let circuits_string = self.ctrl.get_info("circuit-status")?;
-        let (_rest, circuits) = nom::multi::many1(
-            Circuit::parse::<nom::error::VerboseError<&str>>,
-        )(circuits_string.as_str())?;
+        let (rest, _newline) = nom::combinator::opt(nom::bytes::complete::tag::<
+            &str,
+            &str,
+            nom::error::VerboseError<&str>,
+        >("\r\n"))(circuits_string.as_str())?;
+        let (_rest, circuits) =
+            nom::multi::many1(Circuit::parse::<nom::error::VerboseError<&str>>)(rest)?;
 
         Ok(circuits)
     }

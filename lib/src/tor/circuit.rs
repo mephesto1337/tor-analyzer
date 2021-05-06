@@ -590,8 +590,10 @@ impl NomParse for Circuit {
     where
         E: ParseError<&'a str> + ContextError<&'a str>,
     {
-        let (rest, (circuit_id, _, status)) =
-            tuple((CircuitID::parse, space1, CircuitStatus::parse))(s)?;
+        let (rest, (circuit_id, _, status)) = context(
+            "Circuit ID & status",
+            tuple((CircuitID::parse, space1, CircuitStatus::parse)),
+        )(s)?;
 
         let (rest, opt_path) = context("Path", opt(tuple((space1, Path::parse))))(rest)?;
         let path = opt_path.map(|x| x.1).unwrap_or_default();

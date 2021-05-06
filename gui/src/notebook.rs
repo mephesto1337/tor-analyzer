@@ -11,27 +11,72 @@ pub struct Notebook {
     accels: gtk::AccelGroup,
 }
 
+fn find_child<T: StaticType>(widget: gtk::Widget) -> Option<gtk::Widget> {
+    if widget.is::<T>() {
+        return Some(widget);
+    }
+
+    if widget.is::<gtk::Container>() {
+        let container = widget.downcast_ref::<gtk::Container>().unwrap();
+        for c in container.get_children() {
+            let t = find_child::<T>(c);
+            if t.is_some() {
+                return t;
+            }
+        }
+    }
+    None
+}
+
 impl Notebook {
     pub fn new() -> Self {
         let notebook = gtk::Notebook::new();
         notebook.connect_change_current_page(|notebook, idx| {
-            eprintln!("Event: {}", idx);
-            if idx > 0 {
-                notebook.next_page();
-            } else {
-                notebook.prev_page();
+            if idx != 0 {
+                let count = notebook.get_n_pages() as i32;
+                if let Some(current) = notebook.get_current_page() {
+                    let new = current as i32 + idx;
+                    if new >= 0 && new < count {
+                        if idx < 0 {
+                            notebook.next_page();
+                        } else {
+                            notebook.prev_page();
+                        }
+                    } else {
+                        if idx < 0 {
+                            notebook.set_current_page(Some(0));
+                        } else {
+                            notebook.set_current_page(Some(count as u32 - 1));
+                        }
+                    }
+                }
             }
+            let new = notebook.get_nth_page(notebook.get_current_page()).unwrap();
+            if let Some(entry) = find_child::<gtk::Entry>(new) {
+                entry.grab_focus();
+            }
+
             true
         });
-        let (key, mod_) = gtk::accelerator_parse("<ctrl>n");
+        /*
+        notebook.connect_grab_focus(|widget| {
+            let notebook = widget.upcast_ref::<gtk::Notebook>();
+            let page = match notebook.get_nth_page(notebook.get_current_page()) {
+                Some(p) => p,
+                None => return,
+            };
+            let tab = page.downcast_ref::<gtk::Box>().expect("Not a GtkBox");
+            for c in tab.get_children() {
+                if c.is::<gtk::Entry>() {
+                    c.grab_focus();
+                    let entry = c.downcast_ref::<gtk::Entry>().unwrap();
+                    entry.set_position(0);
+                    break;
+                }
+            }
+        });
+        */
         let accels = gtk::AccelGroup::new();
-        notebook.add_accelerator(
-            "change-current-page",
-            &accels,
-            key,
-            mod_,
-            gtk::AccelFlags::VISIBLE,
-        );
         Self {
             notebook,
             tabs: Vec::new(),
@@ -74,6 +119,7 @@ impl Notebook {
 
         self.tabs.push(tab);
 
+        eprintln!("{}: {}", index, title);
         index
     }
 }

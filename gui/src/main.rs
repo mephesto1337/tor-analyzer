@@ -75,7 +75,7 @@ fn build_ui(application: &gtk::Application) {
     notebook.create_tab(&*nodes);
 
     let builder = build_circuit::CircuitTab::new();
-    notebook.create_tab(&builder);
+    notebook.create_tab(&*builder);
 
     nodes.set_entry(builder.get_entry());
 

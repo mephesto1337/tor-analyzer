@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
+#[derive(Debug)]
 pub struct Country {
     pub name: &'static str,
     pub flag: &'static str,

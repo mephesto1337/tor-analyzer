@@ -34,9 +34,12 @@ macro_rules! add_column {
     }};
 }
 
+mod build_circuit;
 mod circuit;
 mod nodes;
 mod notebook;
+
+use notebook::NotebookTab;
 
 static mut TOR_CONTROLLER: Option<Arc<Mutex<TorController>>> = None;
 
@@ -64,8 +67,18 @@ fn build_ui(application: &gtk::Application) {
 
     window.add(&notebook.notebook);
 
-    notebook.create_tab("Circuits", circuit::create_tab(), false);
-    notebook.create_tab("Entry nodes", nodes::create_tab(), false);
+    // notebook.create_tab("Circuits", circuit::create_tab(), false);
+    let circuits = circuit::CircuitTab::new();
+    notebook.create_tab(&*circuits);
+
+    let nodes = nodes::NodeTab::new();
+    notebook.create_tab(&*nodes);
+
+    let builder = build_circuit::CircuitTab::new();
+    notebook.create_tab(&builder);
+
+    nodes.set_entry(builder.get_entry());
+
     window.show_all();
 }
 

@@ -4,14 +4,15 @@
     bind "<Control>f" { "change-current-page" (0) };
 }
 
-@binding-set gtk-root {
-    unbind "<Control>f";
-}
-
 notebook {
   -gtk-key-bindings: gtk-notebook-window;
+}
+/*
+@binding-set gtk-root {
+    unbind "<Control>f";
 }
 
 window {
   -gtk-key-bindings: gtk-root;
 }
+*/

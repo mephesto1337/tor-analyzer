@@ -5,9 +5,12 @@ pub mod geoip;
 pub mod socket;
 pub mod tor;
 
+use std::fmt;
+
 use error::Result;
 use socket::Socket;
 use tor::circuit::Circuit;
+use tor::common::{CircuitID, StreamID};
 use tor::conn::Connection;
 use tor::NomParse;
 
@@ -17,7 +20,7 @@ pub mod prelude {
     pub use crate::geoip::GeoIP;
     pub use crate::socket::Socket;
     pub use crate::tor::circuit::Circuit;
-    pub use crate::tor::common::{CircuitID, StreamID, Target, Time};
+    pub use crate::tor::common::{CircuitID, HostOrAddr, StreamID, Target, Time};
     pub use crate::tor::ns::OnionRouter;
     pub use crate::tor::stream::Stream;
     pub use crate::tor::utils::hex_encode;
@@ -47,7 +50,7 @@ impl TorController {
             nom::error::VerboseError<&str>,
         >("\r\n"))(circuits_string.as_str())?;
         let (_rest, circuits) =
-            nom::multi::many1(Circuit::parse::<nom::error::VerboseError<&str>>)(rest)?;
+            nom::multi::many0(Circuit::parse::<nom::error::VerboseError<&str>>)(rest)?;
 
         Ok(circuits)
     }
@@ -61,7 +64,7 @@ impl TorController {
         Ok(streams)
     }
 
-    pub fn get_onion_router<D: std::fmt::Display>(&mut self, hash: D) -> Result<OnionRouter> {
+    pub fn get_onion_router<D: fmt::Display>(&mut self, hash: D) -> Result<OnionRouter> {
         let or_str = self.ctrl.get_info(&format!("ns/id/{}", hash))?;
         let (_rest, or) = OnionRouter::parse::<nom::error::VerboseError<&str>>(or_str.as_str())?;
 
@@ -75,5 +78,49 @@ impl TorController {
         )?;
 
         Ok(ors)
+    }
+
+    pub fn extend_circuit(&mut self, id: CircuitID, path: Vec<String>) -> Result<String> {
+        let mut path_str =
+            String::with_capacity(path.iter().map(|s| s.len()).sum::<usize>() + path.len() - 1);
+        let mut first = true;
+        for p in path.iter() {
+            if !first {
+                path_str.push(',');
+            }
+            first = false;
+            path_str.push_str(p.as_str());
+        }
+        let response = self
+            .ctrl
+            .send_command(format!("EXTENDCIRCUIT {} {}", id, path_str))?;
+        Ok(response.data)
+    }
+
+    pub fn attach_stream(&mut self, circuit_id: CircuitID, stream_id: StreamID) -> Result<String> {
+        let response = self
+            .ctrl
+            .send_command(format!("ATTACHSTREAM {} {}", circuit_id, stream_id))?;
+        Ok(response.data)
+    }
+
+    pub fn set_conf<D1: fmt::Display, D2: fmt::Display>(
+        &mut self,
+        keyword: D1,
+        value: Option<D2>,
+    ) -> Result<()> {
+        let cmd = if let Some(value) = value {
+            format!("SETCONF {}={}", keyword, value)
+        } else {
+            format!("SETCONF {}", keyword)
+        };
+
+        self.ctrl.send_command(cmd)?;
+        Ok(())
+    }
+
+    pub fn get_conf<D: fmt::Display>(&mut self, keyword: D) -> Result<String> {
+        let response = self.ctrl.send_command(format!("GETCONF {}", keyword))?;
+        Ok(response.data)
     }
 }

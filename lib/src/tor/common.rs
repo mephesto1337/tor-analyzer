@@ -1,5 +1,5 @@
 use std::fmt;
-use std::net::{IpAddr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while};
@@ -10,7 +10,7 @@ use nom::sequence::tuple;
 
 use crate::tor::NomParse;
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct StreamID(pub String);
 
 impl NomParse for StreamID {
@@ -34,7 +34,7 @@ impl fmt::Display for StreamID {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct CircuitID(pub String);
 
 impl NomParse for CircuitID {
@@ -59,8 +59,57 @@ impl fmt::Display for CircuitID {
 }
 
 #[derive(Debug, Eq, PartialEq, Clone)]
+pub enum HostOrAddr {
+    Host(String),
+    Addr(IpAddr),
+}
+impl NomParse for HostOrAddr {
+    fn parse<'a, E>(input: &'a str) -> nom::IResult<&'a str, Self, E>
+    where
+        E: ParseError<&'a str> + ContextError<&'a str>,
+    {
+        context(
+            "Hostname or address",
+            alt((
+                map(
+                    context(
+                        "IPv6",
+                        map_opt(
+                            tuple((
+                                tag("["),
+                                take_while(|c: char| c.is_ascii_hexdigit() || c == ':'),
+                                tag("]"),
+                            )),
+                            |s: (&str, &str, &str)| s.1.parse::<Ipv6Addr>().ok(),
+                        ),
+                    ),
+                    |ip6| HostOrAddr::Addr(IpAddr::V6(ip6)),
+                ),
+                map(
+                    context(
+                        "IPv4",
+                        map_opt(
+                            take_while(|c: char| c.is_ascii_digit() || c == '.'),
+                            |s: &str| s.parse::<Ipv4Addr>().ok(),
+                        ),
+                    ),
+                    |ip4| HostOrAddr::Addr(IpAddr::V4(ip4)),
+                ),
+                map(
+                    context(
+                        "hostname",
+                        take_while(|c: char| c.is_ascii_alphanumeric() || c == '.' || c == '-'),
+                    ),
+                    |host: &str| HostOrAddr::Host(host.into()),
+                ),
+            )),
+        )(input)
+    }
+}
+
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Target {
-    pub addr: IpAddr,
+    pub addr: HostOrAddr,
     pub port: u16,
 }
 
@@ -69,28 +118,7 @@ impl NomParse for Target {
     where
         E: ParseError<&'a str> + ContextError<&'a str>,
     {
-        let (rest, is_ipv6) = opt(tag("["))(input)?;
-
-        let (rest, addr) = if is_ipv6.is_some() {
-            let (rest, ip6) = context(
-                "Target ipv6",
-                map_opt(
-                    take_while(|c: char| c.is_ascii_hexdigit() || c == ':'),
-                    |s: &str| s.parse::<Ipv6Addr>().ok().map(|ip| IpAddr::V6(ip)),
-                ),
-            )(rest)?;
-            let (rest, _) = tag("]")(rest)?;
-            (rest, ip6)
-        } else {
-            context(
-                "Target ip",
-                map_opt(
-                    take_while(|c: char| c.is_ascii_digit() || c == '.'),
-                    |s: &str| s.parse::<IpAddr>().ok(),
-                ),
-            )(rest)?
-        };
-
+        let (rest, addr) = HostOrAddr::parse(input)?;
         let (rest, port) = context(
             "Target port",
             map(
@@ -109,13 +137,14 @@ impl NomParse for Target {
 impl fmt::Display for Target {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.addr {
-            IpAddr::V4(ref ip4) => write!(f, "{}:{}", ip4, self.port),
-            IpAddr::V6(ref ip6) => write!(f, "[{}]:{}", ip6, self.port),
+            HostOrAddr::Host(ref host) => write!(f, "{}:{}", host, self.port),
+            HostOrAddr::Addr(IpAddr::V4(ref ip4)) => write!(f, "{}:{}", ip4, self.port),
+            HostOrAddr::Addr(IpAddr::V6(ref ip6)) => write!(f, "[{}]:{}", ip6, self.port),
         }
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Time {
     pub year: u16,
     pub month: u8,

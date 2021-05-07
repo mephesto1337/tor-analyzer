@@ -167,7 +167,7 @@ impl fmt::Display for OnionRouterFlags {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Clone)]
 pub struct OnionRouter {
     pub nickname: String,
     pub identity: [u8; 20],

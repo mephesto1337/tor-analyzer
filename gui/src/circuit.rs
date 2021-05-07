@@ -203,7 +203,10 @@ impl CircuitTab {
 
             let countries = path
                 .iter()
-                .map(|p| gi.lookup_ip(p.target.addr.clone()))
+                .map(|p| match p.target.addr {
+                    HostOrAddr::Addr(ref addr) => gi.lookup_ip(addr.clone()),
+                    _ => None,
+                })
                 .map(|loc| {
                     if let Some(loc) = loc {
                         country::get_country(loc)

@@ -9,11 +9,11 @@ use tor_analyzer_lib::error::Error;
 use tor_analyzer_lib::prelude::*;
 use tor_analyzer_lib::tor::ns::OnionRouterFlag;
 
+use crate::build_circuit::CircuitTab;
 use crate::notebook::NotebookTab;
 
-#[derive(Debug)]
 #[repr(i32)]
-enum Columns {
+pub(crate) enum Columns {
     EndPoint,
     Country,
     Identity,
@@ -22,64 +22,73 @@ enum Columns {
     Exit,
     MaxColumns,
 }
-const FIELD_COUNT: usize = Columns::MaxColumns as usize;
+pub(crate) const FIELD_COUNT: usize = Columns::MaxColumns as usize;
+pub(crate) const COLUMNS_TYPE: [glib::Type; FIELD_COUNT] = [
+    glib::Type::String,
+    glib::Type::String,
+    glib::Type::String,
+    glib::Type::String,
+    glib::Type::Bool,
+    glib::Type::Bool,
+];
 
-struct Node {
+pub(crate) struct Node {
     country: Option<&'static country::Country>,
     or: OnionRouter,
 }
 
 impl Node {
-    fn target(&self) -> &Target {
+    pub(crate) fn target(&self) -> &Target {
         &self.or.target
     }
-    fn hex_identity(&self) -> String {
+    pub(crate) fn hex_identity(&self) -> String {
         hex_encode(self.or.identity)
     }
-    fn nickname(&self) -> &String {
+    pub(crate) fn nickname(&self) -> &String {
         &self.or.nickname
     }
-    fn is_guard(&self) -> bool {
+    pub(crate) fn is_guard(&self) -> bool {
         self.or.flags.is_set(OnionRouterFlag::Guard)
     }
-    fn is_exit(&self) -> bool {
+    pub(crate) fn is_exit(&self) -> bool {
         self.or.flags.is_set(OnionRouterFlag::Exit)
     }
 }
 
 pub(super) struct NodeTab {
     nodes: Cell<Option<HashMap<String, Node>>>,
-    entry: Cell<Option<Rc<gtk::Entry>>>,
+    circuit_tab: Cell<Option<Rc<CircuitTab>>>,
     widget: Cell<Option<Rc<gtk::Widget>>>,
     store: gtk::ListStore,
 }
 
 impl NodeTab {
     pub(crate) fn new() -> Rc<Self> {
-        let col_types: [glib::Type; FIELD_COUNT] = [
-            glib::Type::String,
-            glib::Type::String,
-            glib::Type::String,
-            glib::Type::String,
-            glib::Type::Bool,
-            glib::Type::Bool,
-        ];
-
         let me = Self {
             nodes: Cell::new(None),
-            entry: Cell::new(None),
+            circuit_tab: Cell::new(None),
             widget: Cell::new(None),
-            store: gtk::ListStore::new(&col_types),
+            store: gtk::ListStore::new(&COLUMNS_TYPE),
         };
         me.create()
     }
 
-    pub(crate) fn set_entry(&self, entry: Rc<gtk::Entry>) {
-        let cur_entry = self.entry.take();
-        if cur_entry.is_some() {
+    pub(crate) fn get_circuit_tab(&self) -> Option<Rc<CircuitTab>> {
+        if let Some(cur_circuit_tab) = self.circuit_tab.take() {
+            let circuit_tab = Rc::clone(&cur_circuit_tab);
+            self.circuit_tab.set(Some(cur_circuit_tab));
+            Some(circuit_tab)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn set_circuit_tab(&self, circuit_tab: Rc<CircuitTab>) {
+        let cur_circuit_tab = self.circuit_tab.take();
+        if cur_circuit_tab.is_some() {
             eprintln!("Overwrite previous entry");
         }
-        self.entry.set(Some(entry));
+        self.circuit_tab.set(Some(circuit_tab));
     }
 
     fn create(self) -> Rc<Self> {
@@ -111,9 +120,12 @@ impl NodeTab {
 
         let gi = GeoIP::new();
         for or in ors.drain(..) {
-            let country = gi
-                .lookup_ip(or.target.addr.clone())
-                .and_then(|c| country::get_country(c));
+            let country = match or.target.addr {
+                HostOrAddr::Addr(ref addr) => gi
+                    .lookup_ip(addr.clone())
+                    .and_then(|c| country::get_country(c)),
+                _ => None,
+            };
 
             let node = Node { country, or };
             nodes.insert(node.hex_identity(), node);
@@ -185,13 +197,12 @@ impl NodeTab {
         treeview.connect_row_activated(move |treeview, treepath, _treeviewcolumn| {
             let model = treeview.get_model().unwrap();
             let iter = model.get_iter(treepath).unwrap();
-            let data = model.get_value(&iter, Columns::Identity as i32);
-            if let Some(text) = data.get::<String>().unwrap() {
-                if let Some(entry) = me.entry.take() {
-                    entry.set_text(text.as_str());
-                    me.entry.set(Some(entry));
-                }
-            }
+            let row = (0..FIELD_COUNT)
+                .map(|col| model.get_value(&iter, col as i32))
+                .collect::<Vec<_>>();
+
+            let circuit_tab = me.get_circuit_tab().unwrap();
+            circuit_tab.add_row(&row[..]);
         });
         sw.add(&treeview);
         search_entry.connect_changed(move |_| treefilter.refilter());

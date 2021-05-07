@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use tor_analyzer_lib::prelude::*;
@@ -38,6 +39,7 @@ mod build_circuit;
 mod circuit;
 mod nodes;
 mod notebook;
+mod stream;
 
 use notebook::NotebookTab;
 
@@ -77,7 +79,10 @@ fn build_ui(application: &gtk::Application) {
     let builder = build_circuit::CircuitTab::new();
     notebook.create_tab(&*builder);
 
-    nodes.set_entry(builder.get_entry());
+    let streams = stream::StreamTab::new();
+    notebook.create_tab(&*streams);
+
+    nodes.set_circuit_tab(Rc::clone(&builder));
 
     window.show_all();
 }
@@ -112,7 +117,9 @@ fn main() {
         .unwrap_or("127.0.0.1:9051".into())
         .clone();
 
-    let ctrl = TorController::new(first_arg).expect("Cannot contact Tor Controller");
+    let mut ctrl = TorController::new(first_arg).expect("Cannot contact Tor Controller");
+    ctrl.set_conf("__LeaveStreamsUnattached", Some(1))
+        .expect("Cannot change config");
     unsafe {
         TOR_CONTROLLER = Some(Arc::new(Mutex::new(ctrl)));
     }
@@ -122,4 +129,8 @@ fn main() {
     application.connect_activate(build_ui);
 
     application.run(&[]);
+    let _ = get_tor_controller()
+        .lock()
+        .unwrap()
+        .set_conf("__LeaveStreamsUnattached", Some(0));
 }

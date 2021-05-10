@@ -34,6 +34,8 @@ pub struct TorController {
 
 impl TorController {
     pub fn new<S: AsRef<str>>(s: S) -> Result<Self> {
+        let s = s.as_ref();
+        log::debug!("Tor controller at {}", s);
         let sock = Socket::new(s)?;
         let mut ctrl = Connection::new(sock);
 
@@ -97,10 +99,10 @@ impl TorController {
         Ok(response.data)
     }
 
-    pub fn attach_stream(&mut self, circuit_id: CircuitID, stream_id: StreamID) -> Result<String> {
+    pub fn attach_stream(&mut self, stream_id: StreamID, circuit_id: CircuitID) -> Result<String> {
         let response = self
             .ctrl
-            .send_command(format!("ATTACHSTREAM {} {}", circuit_id, stream_id))?;
+            .send_command(format!("ATTACHSTREAM {} {}", stream_id, circuit_id))?;
         Ok(response.data)
     }
 

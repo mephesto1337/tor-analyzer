@@ -91,6 +91,7 @@ where
         let computed_server_hash = hmac_sha256::HMAC::mac(&input[..], TOR_SERBER_HASH_KEY);
 
         if computed_server_hash != acr.server_hash {
+            log::error!("Bad hash from server, cookie file changed?!");
             return Err(Error::Protocol(format!(
                 "Invalid server hash (computed={} received={})",
                 hex_encode(computed_server_hash),
@@ -103,6 +104,8 @@ where
             return Err(response.into());
         }
 
+        log::debug!("Connection is now authenticated");
+
         Ok(())
     }
 
@@ -111,7 +114,7 @@ where
             match ResponseLine::parse::<nom::error::VerboseError<&str>>(line.as_str()) {
                 Ok((rest, response_line)) => {
                     if !rest.is_empty() {
-                        eprintln!("read too much: {}", rest);
+                        log::warn!("read too much: {}", rest);
                     }
                     let rest = rest.to_owned();
                     line.clear();
@@ -153,6 +156,7 @@ where
         if !cmd.ends_with("\r\n") {
             cmd.push_str("\r\n");
         }
+        log::trace!("Sending command: {}", cmd);
         self.conn.get_mut().write_all(cmd.as_bytes())?;
 
         let mut line = String::with_capacity(1024);
@@ -179,6 +183,7 @@ where
             data.push_str("\r\n");
         }
 
+        log::trace!("Received: {} {}", code, data);
         Ok(Response { code, data })
     }
 }

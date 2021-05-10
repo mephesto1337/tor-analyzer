@@ -57,7 +57,7 @@ impl CircuitTab {
         let me = Rc::clone(&self);
         update_btn.connect_clicked(move |_| match me.refresh_data() {
             Ok(_) => {}
-            Err(e) => eprintln!("Could not refresh data: {}", e),
+            Err(e) => log::warn!("Could not refresh data: {}", e),
         });
         hbox.add(&self.circuits);
         hbox.add(&update_btn);
@@ -94,12 +94,12 @@ impl CircuitTab {
             });
 
             if !path.iter().all(|o| o.is_some()) {
-                eprintln!("Missing paths");
+                log::error!("Missing paths");
                 return;
             }
             let path = path.drain(..).filter_map(|o| o).collect::<Vec<_>>();
             if path.len() < 3 {
-                eprintln!("Too short");
+                log::error!("Too short");
             }
             let circuit_id = CircuitID(
                 me.circuits
@@ -110,14 +110,13 @@ impl CircuitTab {
             let mutex = crate::get_tor_controller();
             let mut ctrl = mutex.lock().unwrap();
 
-            let response = match ctrl.extend_circuit(circuit_id, path) {
+            match ctrl.extend_circuit(circuit_id, path) {
                 Ok(r) => r,
                 Err(e) => {
-                    eprintln!("Could not extend circuit: {}", e);
+                    log::error!("Could not extend circuit: {}", e);
                     return;
                 }
-            };
-            eprintln!("response: {}", response);
+            }
 
             // me.nodes.clear();
         });

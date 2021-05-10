@@ -86,7 +86,7 @@ impl NodeTab {
     pub(crate) fn set_circuit_tab(&self, circuit_tab: Rc<CircuitTab>) {
         let cur_circuit_tab = self.circuit_tab.take();
         if cur_circuit_tab.is_some() {
-            eprintln!("Overwrite previous entry");
+            log::warn!("Overwrite previous entry");
         }
         self.circuit_tab.set(Some(circuit_tab));
     }
@@ -110,7 +110,7 @@ impl NodeTab {
 
     fn refresh_data(&self) -> Result<(), Error> {
         #[cfg(debug_assertions)]
-        eprintln!("Updating nodes (could take a while, your are in debug mode)");
+        log::warn!("Updating nodes (could take a while, your are in debug mode)");
         let mut nodes = self.get_nodes();
         nodes.clear();
         let mutex = crate::get_tor_controller();
@@ -218,7 +218,7 @@ impl NodeTab {
         let me = Rc::clone(&self);
         update_btn.connect_clicked(move |_| match me.refresh_data() {
             Ok(_) => me.refresh_view(),
-            Err(e) => eprintln!("Could not refresh data: {}", e),
+            Err(e) => log::warn!("Could not refresh data: {}", e),
         });
         vbox.add(&update_btn);
 

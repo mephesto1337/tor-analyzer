@@ -13,7 +13,7 @@ fn init_countries() {
     if !COUNTRIES.load(Ordering::Acquire).is_null() {
         return;
     }
-    eprintln!("Initialize countries...");
+    log::info!("Initialize countries...");
     let mut countries = HashMap::new();
     countries.insert(
         "AF",

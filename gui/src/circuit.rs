@@ -160,7 +160,7 @@ impl CircuitTab {
         let me = Rc::clone(&self);
         update_btn.connect_clicked(move |_| match me.refresh_data() {
             Ok(_) => me.refresh_view(),
-            Err(e) => eprintln!("Could not refresh data: {}", e),
+            Err(e) => log::warn!("Could not refresh data: {}", e),
         });
         vbox.add(&update_btn);
 

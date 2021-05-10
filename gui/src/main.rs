@@ -111,6 +111,7 @@ fn filter_func(filter: String, model: &gtk::TreeModel, iter: &gtk::TreeIter) -> 
 }
 
 fn main() {
+    env_logger::init();
     let first_arg = std::env::args()
         .skip(1)
         .next()

@@ -92,7 +92,7 @@ impl Notebook {
 
         self.tabs.push(tab);
 
-        eprintln!("{}: {}", index, nbt.label());
+        log::debug!("{}: {}", index, nbt.label());
         index
     }
 }

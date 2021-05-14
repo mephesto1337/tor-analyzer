@@ -110,12 +110,9 @@ impl CircuitTab {
             let mutex = crate::get_tor_controller();
             let mut ctrl = mutex.lock().unwrap();
 
-            match ctrl.extend_circuit(circuit_id, path) {
-                Ok(r) => r,
-                Err(e) => {
-                    log::error!("Could not extend circuit: {}", e);
-                    return;
-                }
+            if let Err(e) = ctrl.extend_circuit(circuit_id, path) {
+                popup_error!("Could not extend circuit: {}", e);
+                return;
             }
 
             // me.nodes.clear();

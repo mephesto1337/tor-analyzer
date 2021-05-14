@@ -34,6 +34,20 @@ macro_rules! add_column {
         column
     }};
 }
+macro_rules! popup_error {
+    ($($arg:tt)*) => {{
+        let message = format!($($arg)*);
+        log::error!($($arg)*);
+        let window = gtk::MessageDialog::new(
+            None::<&gtk::ApplicationWindow>,
+            gtk::DialogFlags::empty(),
+            gtk::MessageType::Error,
+            gtk::ButtonsType::Ok,
+            message.as_str(),
+        );
+        window.show();
+    }};
+}
 
 mod build_circuit;
 mod circuit;

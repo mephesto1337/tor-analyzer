@@ -1,3 +1,4 @@
+use std::collections::{HashMap, VecDeque};
 use std::io::{self, BufRead, BufReader, Read, Write};
 
 use rand::RngCore;
@@ -31,6 +32,7 @@ impl std::convert::AsRef<[u8]> for Response {
 
 pub struct Connection<S> {
     conn: BufReader<S>,
+    async_events: Option<HashMap<String, VecDeque<String>>>,
 }
 
 impl<S> Connection<S>
@@ -40,6 +42,7 @@ where
     pub fn new(s: S) -> Self {
         Self {
             conn: BufReader::new(s),
+            async_events: None,
         }
     }
 
@@ -151,14 +154,7 @@ where
         }
     }
 
-    pub fn send_command<B: AsRef<str>>(&mut self, cmd: B) -> Result<Response, Error> {
-        let mut cmd = cmd.as_ref().to_owned();
-        if !cmd.ends_with("\r\n") {
-            cmd.push_str("\r\n");
-        }
-        log::trace!("Sending command: {}", cmd);
-        self.conn.get_mut().write_all(cmd.as_bytes())?;
-
+    fn receive_response(&mut self) -> Result<Response, Error> {
         let mut line = String::with_capacity(1024);
 
         let first_response = self.read_response_line(&mut line)?;
@@ -185,5 +181,72 @@ where
 
         log::trace!("Received: {} {}", code, data);
         Ok(Response { code, data })
+    }
+
+    pub fn send_command<B: AsRef<str>>(&mut self, cmd: B) -> Result<Response, Error> {
+        let mut cmd = cmd.as_ref().to_owned();
+        if !cmd.ends_with("\r\n") {
+            cmd.push_str("\r\n");
+        }
+        log::trace!("Sending command: {}", cmd);
+        self.conn.get_mut().write_all(cmd.as_bytes())?;
+
+        loop {
+            let response = self.receive_response()?;
+            if response.code == 650 {
+                if self.async_events.is_none() {
+                    log::error!("Received async event, but none were subscribed");
+                    continue;
+                }
+
+                if let Some((key, val)) = response.data.split_once(' ') {
+                    if let Some(events) = self.async_events.as_mut().unwrap().get_mut(key) {
+                        events.push_back(val.to_owned());
+                    } else {
+                        log::error!(
+                            "Received async event for {}, but it was not subscribed",
+                            key
+                        );
+                    }
+                } else {
+                    log::warn!("Buggy async response, no first word");
+                }
+
+                continue;
+            }
+
+            return Ok(response);
+        }
+    }
+
+    pub fn handle_async_event(&mut self, events: &[&dyn AsRef<str>]) -> Result<(), Error> {
+        let mut async_events = self.async_events.take().unwrap_or_default();
+        let mut cmd = String::from("SETEVENTS");
+        for event in events {
+            let event = event.as_ref().to_owned();
+            cmd.push(' ');
+            cmd.push_str(event.as_str());
+            async_events.entry(event).or_insert_with(VecDeque::new);
+        }
+
+        let response = self.send_command(cmd)?;
+        if response.code != 250 {
+            Err(response.into())
+        } else {
+            self.async_events = Some(async_events);
+            Ok(())
+        }
+    }
+
+    pub fn consome_async_event(&mut self) -> Option<(String, String)> {
+        let events = self.async_events.as_mut()?;
+
+        for (key, vals) in events.iter_mut() {
+            if let Some(val) = vals.pop_front() {
+                return Some((key.clone(), val));
+            }
+        }
+
+        None
     }
 }

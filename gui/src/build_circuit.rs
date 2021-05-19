@@ -71,9 +71,34 @@ impl CircuitTab {
 
         let treeview = gtk::TreeView::with_model(&*Rc::clone(&self.nodes));
         treeview.set_vexpand(true);
+        treeview
+            .get_selection()
+            .set_mode(gtk::SelectionMode::Multiple);
 
         // Drag and drop
         treeview.set_reorderable(true);
+
+        let me = Rc::clone(&self);
+        treeview.connect_key_press_event(move |treeview, keyevent| {
+            if keyevent.get_keyval() != gdk::keys::constants::Delete {
+                return gtk::Inhibit(false);
+            }
+            let treemodel = treeview.get_model().unwrap();
+            let (selection, _treemodel) = treeview.get_selection().get_selected_rows();
+
+            if selection.is_empty() {
+                return gtk::Inhibit(true);
+            }
+            let model = Rc::clone(&me.nodes);
+            for path in selection.iter() {
+                if let Some(iter) = treemodel.get_iter(path) {
+                    model.remove(&iter);
+                }
+            }
+            treeview.show_all();
+
+            gtk::Inhibit(true)
+        });
         sw.add(&treeview);
         add_column!(treeview, Columns::EndPoint, "End point");
         add_column!(treeview, Columns::Country, "Country");

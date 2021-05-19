@@ -45,7 +45,9 @@ macro_rules! popup_error {
             gtk::ButtonsType::Ok,
             message.as_str(),
         );
-        // TODO: connect OK button with close
+        window.connect_response(|message_dialog, _response_type| unsafe {
+            message_dialog.destroy();
+        });
         window.show();
     }};
 }

@@ -179,7 +179,14 @@ where
             data.push_str("\r\n");
         }
 
-        log::trace!("Received: {} {}", code, data);
+        if log::log_enabled!(log::Level::Trace) {
+            let data = if let Some(idx) = data.rfind("\r\n") {
+                &data[..idx]
+            } else {
+                &data[..]
+            };
+            log::trace!("Received: {} {}", code, data);
+        }
         Ok(Response { code, data })
     }
 
@@ -188,7 +195,10 @@ where
         if !cmd.ends_with("\r\n") {
             cmd.push_str("\r\n");
         }
-        log::trace!("Sending command: {}", cmd);
+        if log::log_enabled!(log::Level::Trace) {
+            let cmd = cmd.split("\r\n").next().unwrap();
+            log::trace!("Sending command: {}", cmd);
+        }
         self.conn.get_mut().write_all(cmd.as_bytes())?;
 
         loop {

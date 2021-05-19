@@ -45,6 +45,7 @@ macro_rules! popup_error {
             gtk::ButtonsType::Ok,
             message.as_str(),
         );
+        // TODO: connect OK button with close
         window.show();
     }};
 }

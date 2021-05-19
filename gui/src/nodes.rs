@@ -20,6 +20,7 @@ pub(crate) enum Columns {
     Nickname,
     Guard,
     Exit,
+    BadExit,
     MaxColumns,
 }
 pub(crate) const FIELD_COUNT: usize = Columns::MaxColumns as usize;
@@ -28,6 +29,7 @@ pub(crate) const COLUMNS_TYPE: [glib::Type; FIELD_COUNT] = [
     glib::Type::String,
     glib::Type::String,
     glib::Type::String,
+    glib::Type::Bool,
     glib::Type::Bool,
     glib::Type::Bool,
 ];
@@ -52,6 +54,9 @@ impl Node {
     }
     pub(crate) fn is_exit(&self) -> bool {
         self.or.flags.is_set(OnionRouterFlag::Exit)
+    }
+    pub(crate) fn is_badexit(&self) -> bool {
+        self.or.flags.is_set(OnionRouterFlag::BadExit)
     }
 }
 
@@ -158,6 +163,7 @@ impl NodeTab {
                 &d.nickname(),
                 &d.is_guard(),
                 &d.is_exit(),
+                &d.is_badexit(),
             ];
             self.store.set(&self.store.append(), &indexes[..], &values);
         }
@@ -213,6 +219,7 @@ impl NodeTab {
         add_column!(treeview, Columns::Nickname, "Nickname");
         add_column!(bool treeview, Columns::Guard, "Guard?");
         add_column!(bool treeview, Columns::Exit, "Exit?");
+        add_column!(bool treeview, Columns::BadExit, "Bad exit?");
 
         let update_btn = gtk::Button::with_label("Update");
         let me = Rc::clone(&self);

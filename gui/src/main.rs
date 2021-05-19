@@ -143,6 +143,7 @@ fn main() {
         gtk::Application::new(Some("local.dev.tor-analyzer-gui"), Default::default()).unwrap();
     application.connect_activate(build_ui);
 
+    // popup_error!("hello world");
     application.run(&[]);
     let _ = get_tor_controller()
         .lock()

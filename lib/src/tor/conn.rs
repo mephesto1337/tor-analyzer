@@ -76,6 +76,7 @@ where
     }
 
     fn safe_cookie_auth(&mut self, cookie: &String) -> Result<(), Error> {
+        log::debug!("Trying to read: {}", cookie);
         let mut input = std::fs::read(cookie)?;
 
         let mut client_nonce = [0u8; 64];

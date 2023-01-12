@@ -97,7 +97,7 @@ pub(crate) struct CircuitTab {
 
 impl CircuitTab {
     pub(crate) fn new() -> Rc<Self> {
-        let col_types = [glib::Type::String; FIELD_COUNT];
+        let col_types = [glib::Type::STRING; FIELD_COUNT];
         let me = Self {
             circuits: Cell::new(None),
             widget: Cell::new(None),
@@ -139,7 +139,7 @@ impl CircuitTab {
         let treefilter = Rc::new(gtk::TreeModelFilter::new(&self.store, None));
         let search_entry_copy = Rc::clone(&search_entry);
         treefilter.set_visible_func(move |model, iter| -> bool {
-            let filter = search_entry_copy.get_text().as_str().to_lowercase();
+            let filter = search_entry_copy.text().as_str().to_lowercase();
 
             crate::filter_func(filter, model, iter)
         });
@@ -238,15 +238,15 @@ impl CircuitTab {
         }
         let circuits = self.get_circuits();
         for c in circuits.iter() {
-            let values: [&dyn ToValue; FIELD_COUNT] = [
-                &c.id(),
-                &c.status(),
-                &c.ips(),
-                &c.countries(),
-                &c.path(),
-                &c.endpoint(),
+            let values: [(u32, &dyn ToValue); FIELD_COUNT] = [
+                (0, &c.id()),
+                (1, &c.status()),
+                (2, &c.ips()),
+                (3, &c.countries()),
+                (4, &c.path()),
+                (5, &c.endpoint()),
             ];
-            self.store.set(&self.store.append(), &indexes[..], &values);
+            self.store.set(&self.store.append(), &values);
         }
         self.set_circuits(circuits);
     }

@@ -3,7 +3,6 @@
 
 use std::rc::Rc;
 
-use glib;
 use gtk::prelude::*;
 use gtk::{IconSize, Orientation, ReliefStyle};
 
@@ -30,7 +29,7 @@ fn find_child<T: StaticType>(widget: gtk::Widget) -> Option<gtk::Widget> {
 
     if widget.is::<gtk::Container>() {
         let container = widget.downcast_ref::<gtk::Container>().unwrap();
-        for c in container.get_children() {
+        for c in container.children() {
             let t = find_child::<T>(c);
             if t.is_some() {
                 return t;

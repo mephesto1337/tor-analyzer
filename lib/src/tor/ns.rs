@@ -1,6 +1,8 @@
 use std::fmt;
 use std::net::Ipv6Addr;
 
+use base64::{engine::general_purpose::STANDARD_NO_PAD, Engine};
+
 use nom::branch::alt;
 use nom::bytes::complete::{tag, take_while};
 use nom::character::complete::{digit1, space1};
@@ -222,9 +224,16 @@ impl NomParse for OnionRouter {
     where
         E: ParseError<&'a str> + ContextError<&'a str>,
     {
+        fn copy_slice(dest: &mut [u8], src: &[u8]) {
+            if dest.len() < src.len() {
+                dest.copy_from_slice(&src[..dest.len()]);
+            } else {
+                (&mut dest[..src.len()]).copy_from_slice(src);
+            }
+        }
         let mut identity = [0u8; 20];
         let mut digest = [0u8; 20];
-        let base64_config = base64::Config::new(base64::CharacterSet::Standard, false);
+        let mut buf = Vec::new();
 
         let (rest, _newline) = opt(tag("\r\n"))(input)?;
         let (rest, _tag) = context("tag 'r'", tag("r"))(rest)?;
@@ -232,14 +241,19 @@ impl NomParse for OnionRouter {
         let (rest, (_, nickname)) =
             context("nickname", tuple((space1, map(word, String::from))))(rest)?;
 
+        buf.clear();
         let (rest, (_, identity64)) = context("identity", tuple((space1, base64_word)))(rest)?;
-        base64::decode_config_slice(identity64, base64_config.clone(), &mut identity[..])
+        STANDARD_NO_PAD
+            .decode_vec(identity64, &mut buf)
             .expect("Invalid base64_word function?!");
+        copy_slice(&mut identity[..], &buf[..]);
 
+        buf.clear();
         let (rest, (_, digest64)) = context("digest", tuple((space1, base64_word)))(rest)?;
-        base64::decode_config_slice(digest64, base64_config.clone(), &mut digest[..])
+        STANDARD_NO_PAD
+            .decode_vec(digest64, &mut buf)
             .expect("Invalid base64_word function?!");
-
+        copy_slice(&mut digest[..], &buf[..]);
         let (rest, (_, publication)) = context("publication", tuple((space1, Time::parse)))(rest)?;
 
         let (rest, (_, target)) = tuple((space1, Target::parse))(rest)?;
@@ -319,7 +333,9 @@ mod tests {
                 mseconds: 0,
             },
             target: Target {
-                addr: IpAddr::V4(Ipv4Addr::new(185, 80, 30, 102)),
+                addr: crate::tor::common::HostOrAddr::Addr(IpAddr::V4(Ipv4Addr::new(
+                    185, 80, 30, 102,
+                ))),
                 port: 9001,
             },
             directory_port: Some(9030),

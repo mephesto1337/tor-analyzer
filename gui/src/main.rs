@@ -3,33 +3,37 @@ use std::sync::{Arc, Mutex};
 
 use tor_analyzer_lib::prelude::*;
 
-use gio::prelude::*;
 use gtk::prelude::*;
 
 macro_rules! add_column {
     (bool $treeview:expr, $variant:expr, $name:expr) => {{
         let renderer = gtk::CellRendererToggle::new();
         let column = gtk::TreeViewColumn::new();
-        column.pack_start(&renderer, true);
-        column.set_title($name);
-        column.add_attribute(&renderer, "active", $variant as i32);
-        column.set_sort_column_id($variant as i32);
-        column.set_sort_indicator(true);
-        column.set_clickable(true);
-        column.set_fixed_width(70);
-        column.set_sizing(gtk::TreeViewColumnSizing::Fixed);
+        gtk::prelude::TreeViewColumnExt::pack_start(&column, &renderer, true);
+        gtk::prelude::TreeViewColumnExt::set_title(&column, $name);
+        gtk::prelude::TreeViewColumnExt::add_attribute(
+            &column,
+            &renderer,
+            "active",
+            $variant as i32,
+        );
+        gtk::prelude::TreeViewColumnExt::set_sort_column_id(&column, $variant as i32);
+        gtk::prelude::TreeViewColumnExt::set_sort_indicator(&column, true);
+        gtk::prelude::TreeViewColumnExt::set_clickable(&column, true);
+        gtk::prelude::TreeViewColumnExt::set_fixed_width(&column, 70);
+        gtk::prelude::TreeViewColumnExt::set_sizing(&column, gtk::TreeViewColumnSizing::Fixed);
         $treeview.append_column(&column);
         column
     }};
     ($treeview:expr, $variant:expr, $name:expr) => {{
         let renderer = gtk::CellRendererText::new();
         let column = gtk::TreeViewColumn::new();
-        column.pack_start(&renderer, true);
-        column.set_title($name);
-        column.add_attribute(&renderer, "text", $variant as i32);
-        column.set_sort_column_id($variant as i32);
-        column.set_sort_indicator(true);
-        column.set_clickable(true);
+        gtk::prelude::TreeViewColumnExt::pack_start(&column, &renderer, true);
+        gtk::prelude::TreeViewColumnExt::set_title(&column, $name);
+        gtk::prelude::TreeViewColumnExt::add_attribute(&column, &renderer, "text", $variant as i32);
+        gtk::prelude::TreeViewColumnExt::set_sort_column_id(&column, $variant as i32);
+        gtk::prelude::TreeViewColumnExt::set_sort_indicator(&column, true);
+        gtk::prelude::TreeViewColumnExt::set_clickable(&column, true);
         $treeview.append_column(&column);
         column
     }};
@@ -77,7 +81,7 @@ fn build_ui(application: &gtk::Application) {
     // We give the CssProvided to the default screen so the CSS rules we added
     // can be applied to our window.
     gtk::StyleContext::add_provider_for_screen(
-        &window.get_screen().unwrap(),
+        &gtk::prelude::WidgetExt::screen(&window).unwrap(),
         &provider,
         gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
     );
@@ -114,10 +118,10 @@ fn filter_func(filter: String, model: &gtk::TreeModel, iter: &gtk::TreeIter) -> 
     }
 
     let mut text = String::new();
-    for i in 0..model.get_n_columns() {
-        let value = model.get_value(iter, i);
+    for i in 0..model.n_columns() {
+        let value = model.value(iter, i);
         if value.is::<String>() {
-            if let Some(v) = value.get::<String>().unwrap() {
+            if let Ok(v) = value.get::<String>() {
                 text.push_str(v.to_lowercase().as_str());
                 text.push(' ');
             }
@@ -127,29 +131,30 @@ fn filter_func(filter: String, model: &gtk::TreeModel, iter: &gtk::TreeIter) -> 
     show
 }
 
-fn main() {
+fn main() -> Result<(), tor_analyzer_lib::error::Error> {
     env_logger::init();
     let first_arg = std::env::args()
-        .skip(1)
-        .next()
-        .unwrap_or("127.0.0.1:9051".into())
-        .clone();
+        .nth(1)
+        .unwrap_or_else(|| "127.0.0.1:9051".into());
 
-    let mut ctrl = TorController::new(first_arg).expect("Cannot contact Tor Controller");
+    let mut ctrl = TorController::new(first_arg)?;
     ctrl.set_conf("__LeaveStreamsUnattached", Some(1))
         .expect("Cannot change config");
     unsafe {
         TOR_CONTROLLER = Some(Arc::new(Mutex::new(ctrl)));
     }
 
-    let application =
-        gtk::Application::new(Some("local.dev.tor-analyzer-gui"), Default::default()).unwrap();
+    let application = gtk::Application::new(
+        Some("local.dev.tor-analyzer-gui"),
+        gio::ApplicationFlags::FLAGS_NONE,
+    );
     application.connect_activate(build_ui);
 
     // popup_error!("hello world");
-    application.run(&[]);
+    application.run_with_args(&[""][..]);
     let _ = get_tor_controller()
         .lock()
         .unwrap()
         .set_conf("__LeaveStreamsUnattached", Some(0));
+    Ok(())
 }

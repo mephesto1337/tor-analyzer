@@ -157,7 +157,7 @@ impl StreamTab {
                 assign_btn.connect_clicked(move |b| {
                     let idx = me_btn
                         .grid
-                        .get_children()
+                        .children()
                         .iter()
                         .enumerate()
                         .find_map(|(idx, widget)| if widget == b { Some(idx + 1) } else { None })
@@ -166,18 +166,18 @@ impl StreamTab {
                     let idx = idx as i32;
                     let stream_id = me_btn
                         .grid
-                        .get_child_at(Columns::StreamID as i32, idx)
+                        .child_at(Columns::StreamID as i32, idx)
                         .unwrap()
                         .downcast_ref::<gtk::Label>()
                         .unwrap()
-                        .get_text();
+                        .text();
                     let opt_circuit_id = me_btn
                         .grid
-                        .get_child_at(Columns::CircuitIds as i32, idx)
+                        .child_at(Columns::CircuitIds as i32, idx)
                         .unwrap()
                         .downcast_ref::<gtk::ComboBoxText>()
                         .unwrap()
-                        .get_active_id();
+                        .active_id();
 
                     if let Some(circuit_id) = opt_circuit_id {
                         let mutex = crate::get_tor_controller();

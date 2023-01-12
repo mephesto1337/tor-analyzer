@@ -2,17 +2,17 @@
 name = "tor-analyzer-gui"
 version = "0.1.0"
 authors = ["Thomas WACHE <thomas@wache.fr>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [[bin]]
 name = "tor-analyzer-gui"
 
 [dependencies]
-gtk = "0.9"
-gdk = "0.13"
-gio = "0.9"
-glib = "0.10"
+gtk = "0.16"
+gdk = "0.16"
+gio = "0.16"
+glib = "0.16"
 tor-analyzer-lib = { path = "../lib" }
 log = "0.4"
-env_logger = "0.8"
+env_logger = "0.10"

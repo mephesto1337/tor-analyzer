@@ -25,13 +25,13 @@ pub(crate) enum Columns {
 }
 pub(crate) const FIELD_COUNT: usize = Columns::MaxColumns as usize;
 pub(crate) const COLUMNS_TYPE: [glib::Type; FIELD_COUNT] = [
-    glib::Type::String,
-    glib::Type::String,
-    glib::Type::String,
-    glib::Type::String,
-    glib::Type::Bool,
-    glib::Type::Bool,
-    glib::Type::Bool,
+    glib::Type::STRING,
+    glib::Type::STRING,
+    glib::Type::STRING,
+    glib::Type::STRING,
+    glib::Type::BOOL,
+    glib::Type::BOOL,
+    glib::Type::BOOL,
 ];
 
 pub(crate) struct Node {
@@ -144,10 +144,6 @@ impl NodeTab {
     fn refresh_view(&self) {
         self.store.clear();
 
-        let mut indexes = [0u32; FIELD_COUNT];
-        for (i, idx) in indexes.iter_mut().enumerate() {
-            *idx = i as u32;
-        }
         let nodes = self.get_nodes();
         for d in nodes.values() {
             let endpoint = format!("{}", d.target());
@@ -156,16 +152,16 @@ impl NodeTab {
             } else {
                 String::new()
             };
-            let values: [&dyn ToValue; FIELD_COUNT] = [
-                &endpoint,
-                &country,
-                &d.hex_identity(),
-                &d.nickname(),
-                &d.is_guard(),
-                &d.is_exit(),
-                &d.is_badexit(),
+            let values: [(u32, &dyn ToValue); FIELD_COUNT] = [
+                (0, &endpoint),
+                (1, &country),
+                (2, &d.hex_identity()),
+                (3, &d.nickname()),
+                (4, &d.is_guard()),
+                (5, &d.is_exit()),
+                (6, &d.is_badexit()),
             ];
-            self.store.set(&self.store.append(), &indexes[..], &values);
+            self.store.set(&self.store.append(), &values);
         }
         self.set_nodes(nodes);
     }
@@ -192,7 +188,7 @@ impl NodeTab {
         let treefilter = Rc::new(gtk::TreeModelFilter::new(&self.store, None));
         let search_entry_copy = Rc::clone(&search_entry);
         treefilter.set_visible_func(move |model, iter| -> bool {
-            let filter = search_entry_copy.get_text().as_str().to_lowercase();
+            let filter = search_entry_copy.text().as_str().to_lowercase();
 
             crate::filter_func(filter, model, iter)
         });
@@ -201,10 +197,10 @@ impl NodeTab {
 
         let me = Rc::clone(&self);
         treeview.connect_row_activated(move |treeview, treepath, _treeviewcolumn| {
-            let model = treeview.get_model().unwrap();
-            let iter = model.get_iter(treepath).unwrap();
+            let model = treeview.model().unwrap();
+            let iter = model.iter(treepath).unwrap();
             let row = (0..FIELD_COUNT)
-                .map(|col| model.get_value(&iter, col as i32))
+                .map(|col| model.value(&iter, col as i32))
                 .collect::<Vec<_>>();
 
             let circuit_tab = me.get_circuit_tab().unwrap();

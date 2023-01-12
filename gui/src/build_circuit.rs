@@ -71,27 +71,25 @@ impl CircuitTab {
 
         let treeview = gtk::TreeView::with_model(&*Rc::clone(&self.nodes));
         treeview.set_vexpand(true);
-        treeview
-            .get_selection()
-            .set_mode(gtk::SelectionMode::Multiple);
+        treeview.selection().set_mode(gtk::SelectionMode::Multiple);
 
         // Drag and drop
         treeview.set_reorderable(true);
 
         let me = Rc::clone(&self);
         treeview.connect_key_press_event(move |treeview, keyevent| {
-            if keyevent.get_keyval() != gdk::keys::constants::Delete {
+            if keyevent.keyval() != gdk::keys::constants::Delete {
                 return gtk::Inhibit(false);
             }
-            let treemodel = treeview.get_model().unwrap();
-            let (selection, _treemodel) = treeview.get_selection().get_selected_rows();
+            let treemodel = treeview.model().unwrap();
+            let (selection, _treemodel) = treeview.selection().selected_rows();
 
             if selection.is_empty() {
                 return gtk::Inhibit(true);
             }
             let model = Rc::clone(&me.nodes);
             for path in selection.iter() {
-                if let Some(iter) = treemodel.get_iter(path) {
+                if let Some(iter) = treemodel.iter(path) {
                     model.remove(&iter);
                 }
             }
@@ -113,22 +111,17 @@ impl CircuitTab {
             let store = &*me.nodes;
             let mut path = Vec::new();
             store.foreach(|model, _path, iter| {
-                let value = model.get_value(iter, Columns::Identity as i32);
+                let value = model.value(iter, Columns::Identity as i32);
                 path.push(value.get::<String>().unwrap());
                 false
             });
 
-            if !path.iter().all(|o| o.is_some()) {
-                log::error!("Missing paths");
-                return;
-            }
-            let path = path.drain(..).filter_map(|o| o).collect::<Vec<_>>();
             if path.len() < 3 {
                 log::error!("Too short");
             }
             let circuit_id = CircuitID(
                 me.circuits
-                    .get_active_text()
+                    .active_text()
                     .map(|gs| gs.into())
                     .unwrap_or(String::from("0")),
             );

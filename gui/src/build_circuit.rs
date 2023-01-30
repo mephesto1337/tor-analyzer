@@ -115,7 +115,8 @@ impl CircuitTab {
             });
 
             if path.len() < 3 {
-                log::error!("Too short");
+                popup_error!("Need at least 3 nodes to build a ciruit");
+                return;
             }
             let circuit_id = CircuitID(
                 me.circuits

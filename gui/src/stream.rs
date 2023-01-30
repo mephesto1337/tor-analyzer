@@ -18,9 +18,7 @@ enum Columns {
     StreamEndpoint,
     CircuitIds,
     AttachButton,
-    MaxColumn,
 }
-const COLUMN_COUNT: i32 = Columns::MaxColumn as i32;
 
 struct Circuit {
     circuit: tor_analyzer_lib::prelude::Circuit,

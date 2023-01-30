@@ -42,9 +42,7 @@ impl CircuitTab {
 
     pub(crate) fn add_row(&self, row: &[glib::Value]) {
         let iter = self.nodes.append();
-        for col in 0..FIELD_COUNT {
-            self.nodes.set_value(&iter, col as u32, &row[col])
-        }
+        (0..FIELD_COUNT).for_each(|col| self.nodes.set_value(&iter, col as u32, &row[col]));
     }
 
     pub(crate) fn create_ui(self: Rc<Self>) {
@@ -168,8 +166,7 @@ impl CircuitTab {
 
 impl NotebookTab for CircuitTab {
     fn get_widget(&self) -> Rc<gtk::Widget> {
-        let widget = Rc::clone(&self.widget);
-        widget
+        Rc::clone(&self.widget)
     }
 
     fn label(&self) -> &'static str {

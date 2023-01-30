@@ -131,7 +131,7 @@ impl StreamTab {
                     c.circuit.status == CircuitStatus::Built
                         && !occupied_circuits.contains(&&c.circuit.id)
                 }) {
-                    if let Some(ref out_country) = circuit.out_country {
+                    if let Some(out_country) = circuit.out_country {
                         combobox.append(
                             Some(circuit.circuit.id.0.as_str()),
                             format!(
@@ -213,9 +213,7 @@ impl StreamTab {
             let or = ctrl.get_onion_router(hex_encode(last_node.fingerprint))?;
             let out_country = match or.target.addr {
                 HostOrAddr::Host(_) => None,
-                HostOrAddr::Addr(ref addr) => {
-                    gi.lookup_ip(addr.clone()).and_then(country::get_country)
-                }
+                HostOrAddr::Addr(ref addr) => gi.lookup_ip(*addr).and_then(country::get_country),
             };
             circuits_with_country.push(Circuit {
                 circuit: c,
@@ -231,8 +229,7 @@ impl StreamTab {
 
 impl NotebookTab for StreamTab {
     fn get_widget(&self) -> Rc<gtk::Widget> {
-        let widget = Rc::clone(&self.widget);
-        widget
+        Rc::clone(&self.widget)
     }
 
     fn label(&self) -> &'static str {

@@ -1,3 +1,4 @@
+#[allow(clippy::all)]
 mod bindings;
 pub mod country;
 pub mod error;
@@ -67,7 +68,7 @@ impl TorController {
     }
 
     pub fn get_onion_router<D: fmt::Display>(&mut self, hash: D) -> Result<OnionRouter> {
-        let or_str = self.ctrl.get_info(&format!("ns/id/{}", hash))?;
+        let or_str = self.ctrl.get_info(&format!("ns/id/{hash}"))?;
         let (_rest, or) = OnionRouter::parse::<nom::error::VerboseError<&str>>(or_str.as_str())?;
 
         Ok(or)
@@ -95,14 +96,14 @@ impl TorController {
         }
         let response = self
             .ctrl
-            .send_command(format!("EXTENDCIRCUIT {} {}", id, path_str))?;
+            .send_command(format!("EXTENDCIRCUIT {id} {path_str}"))?;
         Ok(response.data)
     }
 
     pub fn attach_stream(&mut self, stream_id: StreamID, circuit_id: CircuitID) -> Result<String> {
         let response = self
             .ctrl
-            .send_command(format!("ATTACHSTREAM {} {}", stream_id, circuit_id))?;
+            .send_command(format!("ATTACHSTREAM {stream_id} {circuit_id}"))?;
         Ok(response.data)
     }
 
@@ -112,9 +113,9 @@ impl TorController {
         value: Option<D2>,
     ) -> Result<()> {
         let cmd = if let Some(value) = value {
-            format!("SETCONF {}={}", keyword, value)
+            format!("SETCONF {keyword}={value}")
         } else {
-            format!("SETCONF {}", keyword)
+            format!("SETCONF {keyword}")
         };
 
         self.ctrl.send_command(cmd)?;
@@ -122,7 +123,7 @@ impl TorController {
     }
 
     pub fn get_conf<D: fmt::Display>(&mut self, keyword: D) -> Result<String> {
-        let response = self.ctrl.send_command(format!("GETCONF {}", keyword))?;
+        let response = self.ctrl.send_command(format!("GETCONF {keyword}"))?;
         Ok(response.data)
     }
 }

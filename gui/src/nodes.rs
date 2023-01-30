@@ -126,9 +126,7 @@ impl NodeTab {
         let gi = GeoIP::new();
         for or in ors.drain(..) {
             let country = match or.target.addr {
-                HostOrAddr::Addr(ref addr) => gi
-                    .lookup_ip(addr.clone())
-                    .and_then(|c| country::get_country(c)),
+                HostOrAddr::Addr(ref addr) => gi.lookup_ip(*addr).and_then(country::get_country),
                 _ => None,
             };
 

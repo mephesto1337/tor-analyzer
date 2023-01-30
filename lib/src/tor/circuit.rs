@@ -129,9 +129,9 @@ impl fmt::Display for CircuitBuildFlags {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, flag) in self.0.iter().enumerate() {
             if i == 0 {
-                write!(f, "{}", flag)?;
+                write!(f, "{flag}")?;
             } else {
-                write!(f, "|{}", flag)?;
+                write!(f, "|{flag}")?;
             }
         }
         Ok(())
@@ -435,9 +435,9 @@ impl fmt::Display for Path {
         f.write_char('[')?;
         for (i, path) in self.0.iter().enumerate() {
             if i == 0 {
-                write!(f, "{}", path)?;
+                write!(f, "{path}")?;
             } else {
-                write!(f, ", {}", path)?;
+                write!(f, ", {path}")?;
             }
         }
         f.write_char(']')
@@ -560,25 +560,25 @@ impl fmt::Display for Circuit {
         )?;
 
         if let Some(ref purpose) = self.purpose {
-            write!(f, " purpose={}", purpose)?;
+            write!(f, " purpose={purpose}")?;
         }
         if let Some(ref hs_state) = self.hs_state {
-            write!(f, " hs_state={}", hs_state)?;
+            write!(f, " hs_state={hs_state}")?;
         }
         if let Some(ref rend_query) = self.rend_query {
-            write!(f, " rend_query={}", rend_query)?;
+            write!(f, " rend_query={rend_query}")?;
         }
         if let Some(ref time_created) = self.time_created {
-            write!(f, " time_created={}", time_created)?;
+            write!(f, " time_created={time_created}")?;
         }
         if let Some(ref reason) = self.reason {
-            write!(f, " reason={}", reason)?;
+            write!(f, " reason={reason}")?;
         }
         if let Some(ref socks_username) = self.socks_username {
-            write!(f, " socks_username={}", socks_username)?;
+            write!(f, " socks_username={socks_username}")?;
         }
         if let Some(ref socks_password) = self.socks_password {
-            write!(f, " socks_password={}", socks_password)?;
+            write!(f, " socks_password={socks_password}")?;
         }
 
         Ok(())

@@ -134,7 +134,7 @@ where
 
     pub fn get_info<B: AsRef<str>>(&mut self, cmd: B) -> Result<String, Error> {
         let cmd = cmd.as_ref();
-        let response = self.send_command(format!("GETINFO {}", cmd))?;
+        let response = self.send_command(format!("GETINFO {cmd}"))?;
         if response.code != 250 {
             return Err(response.into());
         }
@@ -142,8 +142,7 @@ where
         if let Some((key, val)) = parse_single_key_value(response.data.as_str()) {
             if key != cmd {
                 return Err(Error::Protocol(format!(
-                    "Invalid prefix (expected: {:?} received={:?})",
-                    cmd, key
+                    "Invalid prefix (expected: {cmd:?} received={key:?})",
                 )));
             }
             Ok(val.into())

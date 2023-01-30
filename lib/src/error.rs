@@ -121,18 +121,17 @@ impl nom::error::ParseError<&str> for Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Protocol(ref string) => write!(f, "Protocol error: {}", string),
+            Self::Protocol(ref string) => write!(f, "Protocol error: {string}"),
             Self::ServerResponse(ref code, ref message) => {
                 write!(
                     f,
-                    "Protocol error: invalid server response code={}: {}",
-                    code, message
+                    "Protocol error: invalid server response code={code}: {message}"
                 )
             }
-            Self::Io(ref io) => write!(f, "IO: {}", io),
+            Self::Io(ref io) => write!(f, "IO: {io}"),
             Self::Incomplete(ne) => match ne {
                 nom::Needed::Unknown => write!(f, "Missing bytes"),
-                nom::Needed::Size(ref s) => write!(f, "Missing {} bytes", s),
+                nom::Needed::Size(ref s) => write!(f, "Missing {s} bytes"),
             },
             Self::Parsing {
                 ref data,
@@ -140,17 +139,17 @@ impl fmt::Display for Error {
                 ref trace,
             } => {
                 let kind = match kind {
-                    nom::error::VerboseErrorKind::Nom(kind) => format!("{:?}", kind),
+                    nom::error::VerboseErrorKind::Nom(kind) => format!("{kind:?}"),
                     nom::error::VerboseErrorKind::Context(ctx) => (*ctx).into(),
-                    nom::error::VerboseErrorKind::Char(c) => format!("Bad char {:?}", c),
+                    nom::error::VerboseErrorKind::Char(c) => format!("Bad char {c:?}"),
                 };
-                write!(f, "Parsing: {} at {:?}", kind, data)?;
+                write!(f, "Parsing: {kind} at {data:?}")?;
                 if let Some(trace) = trace.as_ref() {
-                    write!(f, "\n{}", trace)?;
+                    write!(f, "\n{trace}")?;
                 }
                 Ok(())
             }
-            Self::Base64(be) => write!(f, "Base64: {}", be),
+            Self::Base64(be) => write!(f, "Base64: {be}"),
         }
     }
 }

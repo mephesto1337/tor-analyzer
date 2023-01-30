@@ -48,10 +48,7 @@ pub(crate) fn parse_hex<'a, E>(s: &'a str) -> nom::IResult<&'a str, u8, E>
 where
     E: ParseError<&'a str> + ContextError<&'a str>,
 {
-    let (rest, h) = map_opt(take(2usize), |h| {
-        let x = u8::from_str_radix(h, 16).ok();
-        x
-    })(s)?;
+    let (rest, h) = map_opt(take(2usize), |h| u8::from_str_radix(h, 16).ok())(s)?;
     Ok((rest, h))
 }
 
@@ -74,7 +71,7 @@ pub(crate) fn hex_encode_inplace<F: std::fmt::Write, B: AsRef<[u8]>>(
 ) -> fmt::Result {
     let bytes = s.as_ref();
     for b in bytes.iter() {
-        write!(f, "{:02X}", b)?;
+        write!(f, "{b:02X}")?;
     }
     Ok(())
 }

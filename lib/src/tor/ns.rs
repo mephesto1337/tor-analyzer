@@ -158,9 +158,9 @@ impl fmt::Display for OnionRouterFlags {
             if self.is_set(*flag) {
                 if first {
                     first = false;
-                    write!(f, "{}", flag)?;
+                    write!(f, "{flag}")?;
                 } else {
-                    write!(f, "|{}", flag)?;
+                    write!(f, "|{flag}")?;
                 }
             }
         }
@@ -228,7 +228,7 @@ impl NomParse for OnionRouter {
             if dest.len() < src.len() {
                 dest.copy_from_slice(&src[..dest.len()]);
             } else {
-                (&mut dest[..src.len()]).copy_from_slice(src);
+                dest[..src.len()].copy_from_slice(src);
             }
         }
         let mut identity = [0u8; 20];

@@ -64,14 +64,14 @@ impl Circuit {
                 path.push('\n');
             }
             first = false;
-            path.push_str(&format!("{}", p));
+            path.push_str(&format!("{p}"));
         }
         path
     }
 
     fn endpoint(&self) -> String {
         match self.endpoint {
-            Some(ref ep) => format!("{}", ep),
+            Some(ref ep) => format!("{ep}"),
             None => String::new(),
         }
     }
@@ -204,7 +204,7 @@ impl CircuitTab {
             let countries = path
                 .iter()
                 .map(|p| match p.target.addr {
-                    HostOrAddr::Addr(ref addr) => gi.lookup_ip(addr.clone()),
+                    HostOrAddr::Addr(ref addr) => gi.lookup_ip(*addr),
                     _ => None,
                 })
                 .map(|loc| {

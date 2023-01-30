@@ -3,7 +3,7 @@ use crate::bindings;
 use std::ffi;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::ptr::{self, NonNull};
+use std::ptr::NonNull;
 
 fn get_c_string<S: AsRef<str>>(s: S) -> io::Result<ffi::CString> {
     ffi::CString::new(s.as_ref())
@@ -29,6 +29,12 @@ fn get_ipv4_mapped(ip6: &Ipv6Addr) -> Option<Ipv4Addr> {
 pub struct GeoIP {
     ip4: NonNull<bindings::GeoIP>,
     ip6: NonNull<bindings::GeoIP>,
+}
+
+impl Default for GeoIP {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GeoIP {
@@ -68,7 +74,7 @@ impl GeoIP {
     }
 
     fn country_ptr_to_option(ptr: *const i8) -> Option<&'static str> {
-        if ptr == ptr::null_mut() {
+        if ptr.is_null() {
             return None;
         }
 

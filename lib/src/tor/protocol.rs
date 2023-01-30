@@ -49,11 +49,7 @@ impl ResponseLine {
     }
 
     pub(crate) fn is_end(&self) -> bool {
-        if let Self::End { .. } = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Self::End { .. })
     }
 }
 

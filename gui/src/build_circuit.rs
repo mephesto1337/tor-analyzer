@@ -132,7 +132,7 @@ impl CircuitTab {
                 return;
             }
 
-            // me.nodes.clear();
+            me.nodes.clear();
         });
         vbox.add(&create_circuit_btn);
 
